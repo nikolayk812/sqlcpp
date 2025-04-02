@@ -18,3 +18,18 @@ type CartItem struct {
 	PriceCurrency string
 	CreatedAt     time.Time
 }
+
+type Order struct {
+	ID        uuid.UUID
+	OwnerID   string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type OrderItem struct {
+	OrderID       uuid.UUID
+	ProductID     uuid.UUID
+	PriceAmount   decimal.Decimal
+	PriceCurrency string
+	CreatedAt     time.Time
+}

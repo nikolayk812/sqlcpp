@@ -6,9 +6,11 @@ import (
 )
 
 type Order struct {
-	ID      uuid.UUID
-	OwnerID string
-	Items   []OrderItem
+	ID        uuid.UUID
+	OwnerID   string
+	Items     []OrderItem
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type OrderItem struct {
