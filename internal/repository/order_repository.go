@@ -49,9 +49,9 @@ func (r *orderRepository) GetOrder(ctx context.Context, orderID uuid.UUID) (doma
 			return o, fmt.Errorf("q.GetOrderItems: %w", err)
 		}
 
-		domainOrder, err := mapDBOrderToDomainOrder(dbOrder, dbOrderItems)
+		domainOrder, err := mapDBOrderToDomain(dbOrder, dbOrderItems)
 		if err != nil {
-			return o, fmt.Errorf("mapDBOrderToDomainOrder: %w", err)
+			return o, fmt.Errorf("mapDBOrderToDomain: %w", err)
 		}
 
 		return domainOrder, nil
@@ -95,6 +95,14 @@ func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (
 	return orderID, nil
 }
 
+func (r *orderRepository) withTx(ctx context.Context, fn func(q *db.Queries) error) error {
+	_, err := withTx(ctx, r.pool, r.q, func(q *db.Queries) (struct{}, error) {
+		err := fn(q)
+		return struct{}{}, err
+	})
+	return err
+}
+
 func (r *orderRepository) withTxOrder(ctx context.Context, fn func(q *db.Queries) (domain.Order, error)) (domain.Order, error) {
 	return withTx(ctx, r.pool, r.q, fn)
 }
@@ -103,7 +111,7 @@ func (r *orderRepository) withTxUUID(ctx context.Context, fn func(q *db.Queries)
 	return withTx(ctx, r.pool, r.q, fn)
 }
 
-func mapGetOrderRowToDomainOrderItem(row db.GetOrderItemsRow) (domain.OrderItem, error) {
+func mapGetOrderRowToDomain(row db.GetOrderItemsRow) (domain.OrderItem, error) {
 	parsedCurrency, err := currency.ParseISO(row.PriceCurrency)
 	if err != nil {
 		return domain.OrderItem{}, fmt.Errorf("currency[%s] is not valid: %w", row.PriceCurrency, err)
@@ -116,22 +124,25 @@ func mapGetOrderRowToDomainOrderItem(row db.GetOrderItemsRow) (domain.OrderItem,
 	}, nil
 }
 
-func mapGetOrderRowsToDomainOrderItems(rows []db.GetOrderItemsRow) ([]domain.OrderItem, error) {
+func mapGetOrderRowsToDomain(rows []db.GetOrderItemsRow) ([]domain.OrderItem, error) {
 	var items []domain.OrderItem
+
 	for _, row := range rows {
-		item, err := mapGetOrderRowToDomainOrderItem(row)
+		item, err := mapGetOrderRowToDomain(row)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("mapGetOrderRowToDomain: %w", err)
 		}
+
 		items = append(items, item)
 	}
+
 	return items, nil
 }
 
-func mapDBOrderToDomainOrder(dbOrder db.Order, dbOrderItems []db.GetOrderItemsRow) (domain.Order, error) {
-	items, err := mapGetOrderRowsToDomainOrderItems(dbOrderItems)
+func mapDBOrderToDomain(dbOrder db.Order, dbOrderItems []db.GetOrderItemsRow) (domain.Order, error) {
+	items, err := mapGetOrderRowsToDomain(dbOrderItems)
 	if err != nil {
-		return domain.Order{}, fmt.Errorf("mapGetOrderRowsToDomainOrderItems: %w", err)
+		return domain.Order{}, fmt.Errorf("mapGetOrderRowsToDomain: %w", err)
 	}
 
 	return domain.Order{
