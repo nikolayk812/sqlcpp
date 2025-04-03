@@ -8,28 +8,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nikolayk812/sqlcpp/internal/db"
 	"github.com/nikolayk812/sqlcpp/internal/domain"
+	"github.com/nikolayk812/sqlcpp/internal/port"
 	"golang.org/x/text/currency"
 )
-
-type CartRepository interface {
-	GetCart(ctx context.Context, ownerID string) (domain.Cart, error)
-	AddItem(ctx context.Context, ownerID string, item domain.CartItem) error
-	DeleteItem(ctx context.Context, ownerID string, productID uuid.UUID) (bool, error)
-}
 
 type cartRepository struct {
 	q    *db.Queries
 	pool *pgxpool.Pool
 }
 
-func NewCartRepository(pool *pgxpool.Pool) CartRepository {
+func NewCartRepository(pool *pgxpool.Pool) port.CartRepository {
 	return &cartRepository{
 		q:    db.New(pool),
 		pool: pool,
 	}
 }
 
-func NewCartRepositoryWithTx(tx pgx.Tx) CartRepository {
+func NewCartRepositoryWithTx(tx pgx.Tx) port.CartRepository {
 	return &cartRepository{
 		q:    db.New(tx),
 		pool: nil, // use provided transaction instead

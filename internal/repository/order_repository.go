@@ -8,27 +8,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nikolayk812/sqlcpp/internal/db"
 	"github.com/nikolayk812/sqlcpp/internal/domain"
+	"github.com/nikolayk812/sqlcpp/internal/port"
 	"golang.org/x/text/currency"
 )
-
-type OrderRepository interface {
-	GetOrder(ctx context.Context, orderID uuid.UUID) (domain.Order, error)
-	InsertOrder(ctx context.Context, order domain.Order) (uuid.UUID, error)
-}
 
 type orderRepository struct {
 	q    *db.Queries
 	pool *pgxpool.Pool
 }
 
-func NewOrderRepository(pool *pgxpool.Pool) OrderRepository {
+func NewOrder(pool *pgxpool.Pool) port.OrderRepository {
 	return &orderRepository{
 		q:    db.New(pool),
 		pool: pool,
 	}
 }
 
-func NewOrderRepositoryWithTx(tx pgx.Tx) OrderRepository {
+func NewOrderWithTx(tx pgx.Tx) port.OrderRepository {
 	return &orderRepository{
 		q:    db.New(tx),
 		pool: nil, // use provided transaction instead

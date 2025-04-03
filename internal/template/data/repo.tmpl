@@ -7,26 +7,26 @@ If there is only call to sqlc query inside withTx then mapping can be done outsi
 
 No need to explain anything, provide only generated Go code according to provided interface in the end.
 
-Generated models/records by sqlc:
+### Generated models/records by sqlc ###
 
 {{ .SQLCModelsCode }}
 
-My domain models hand-written for Order:
+### My domain models hand-written for Order ###
 
 {{ .OrderDomainModelCode }}
 
-My repository hand-written for Order:
+### My repository hand-written for Order ###
 
 {{ .OrderRepositoryCode }}
 
-My domain model hand-written for {{ .DomainModelName }}:
+### My domain model hand-written for {{ .DomainModelName }} ###
 
 {{ .DomainModelCode }}
 
-Generated queries by sqlc for {{ .DomainModelName }}:
+### Generated queries by sqlc for {{ .DomainModelName }} ###
 
 {{ .DomainModelSQLCQueriesCode }}
 
-Here comes the interface you have to implement:
+### Here comes the interface you have to implement ###
 
-{{ .DomainModelRepositoryInterfaceCode }}
+{{ .DomainModelPortCode }}
