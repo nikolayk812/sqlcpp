@@ -1,53 +1,60 @@
-package main
+package template
 
 import (
-	"log"
+	"fmt"
 	"os"
 	"strings"
 	"text/template"
 )
 
 type Engine struct {
-	fileMap map[string]string
+	filename string
+	data     map[string]string
 }
 
-func main() {
-	// Read template from file
-	templateFile := "internal/template/data/repo.tmpl"
+func NewEngine(filename string, data map[string]string) *Engine {
+	e := &Engine{
+		filename: filename,
+		data:     data,
+	}
 
-	tmpl, err := template.ParseFiles(templateFile)
+	return e
+}
+
+func (e *Engine) Execute() (string, error) {
+	resolvedData, err := e.resolveFiles()
 	if err != nil {
-		log.Fatalf("Error parsing template: %v", err)
+		return "", fmt.Errorf("e.resolveFiles: %w", err)
 	}
 
-	// Data to inject into the template
-	data := map[string]string{
-		"DomainModelName": "Cart",
-		"SQLCModelsCode":  "db/models.go",
-
-		"OrderDomainModelCode": "domain/order.go",
-		"OrderRepositoryCode":  "repository/order_repository.go",
-
-		"DomainModelCode":            "domain/cart.go",
-		"DomainModelSQLCQueriesCode": "db/01_cart.sql.go",
-		"DomainModelPortCode":        "port/cart_port.go",
+	tmpl, err := template.ParseFiles(e.filename)
+	if err != nil {
+		return "", fmt.Errorf("template.ParseFiles: %w", err)
 	}
 
-	for k, v := range data {
-		if strings.HasSuffix(v, ".go") {
-			path := "internal/" + v
-			content, err := os.ReadFile(path)
-			if err != nil {
-				panic(err)
-			}
+	var output strings.Builder
+	if err := tmpl.Execute(&output, resolvedData); err != nil {
+		return "", fmt.Errorf("tmpl.Execute: %w", err)
+	}
 
-			data[k] = string(content)
+	return output.String(), nil
+}
+
+func (e *Engine) resolveFiles() (map[string]string, error) {
+	result := make(map[string]string, len(e.data))
+
+	for k, v := range e.data {
+		if !strings.HasSuffix(v, ".go") {
+			result[k] = v
+			continue
 		}
+
+		content, err := os.ReadFile(v)
+		if err != nil {
+			return nil, fmt.Errorf("os.ReadFile[%s][%s]: %w", k, v, err)
+		}
+		result[k] = string(content)
 	}
 
-	// Execute template with data
-	err = tmpl.Execute(os.Stdout, data)
-	if err != nil {
-		log.Fatalf("Error executing template: %v", err)
-	}
+	return result, nil
 }

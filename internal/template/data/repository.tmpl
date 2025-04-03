@@ -3,7 +3,9 @@ which is the reference implementation. I am using sqlc-dev/sqlc generator,
 which generates queries and records. Repository layer has to do adaptation between sqlc generated code and domain models.
 The adaptation involves mapping sqlc generated records to domain models and vice versa, transactional orchestration.
 
-If there is only call to sqlc query inside withTx then mapping can be done outside of withTx.
+Do not use withTx methods, if there is a single call to sqlc query from a repository method, call it directly.
+
+Follow this pattern of creating an empty var o domain.Order and returning it only for error cases.
 
 No need to explain anything, provide only generated Go code according to provided interface in the end.
 
