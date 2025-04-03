@@ -19,24 +19,24 @@ import (
 	"testing"
 )
 
-type orderRepositorySuite struct {
+type cartRepositorySuite struct {
 	suite.Suite
 
 	pool      *pgxpool.Pool
-	repo      port.OrderRepository
+	repo      port.CartRepository
 	container testcontainers.Container
 }
 
 // entry point to run the tests in the suite
-func TestOrderRepositorySuite(t *testing.T) {
+func TestCartRepositorySuite(t *testing.T) {
 	// Verifies no leaks after all tests in the suite run.
 	defer goleak.VerifyNone(t)
 
-	suite.Run(t, new(orderRepositorySuite))
+	suite.Run(t, new(cartRepositorySuite))
 }
 
 // before all tests in the suite
-func (suite *orderRepositorySuite) SetupSuite() {
+func (suite *cartRepositorySuite) SetupSuite() {
 	ctx := suite.T().Context()
 
 	var (
@@ -50,12 +50,12 @@ func (suite *orderRepositorySuite) SetupSuite() {
 	suite.pool, err = pgxpool.New(ctx, connStr)
 	suite.NoError(err)
 
-	suite.repo = repository.NewOrder(suite.pool)
+	suite.repo = repository.NewCart(suite.pool)
 	suite.NoError(err)
 }
 
 // after all tests in the suite
-func (suite *orderRepositorySuite) TearDownSuite() {
+func (suite *cartRepositorySuite) TearDownSuite() {
 	ctx := suite.T().Context()
 
 	if suite.pool != nil {
@@ -66,24 +66,25 @@ func (suite *orderRepositorySuite) TearDownSuite() {
 	}
 }
 
-func (suite *orderRepositorySuite) TestInsertOrder() {
-	order1 := fakeOrder()
-
-	order2 := fakeOrder()
-	order2.Items = nil
+func (suite *cartRepositorySuite) TestAddItem() {
+	item1 := fakeCartItem()
+	item2 := fakeCartItem()
 
 	tests := []struct {
 		name      string
-		order     domain.Order
+		ownerID   string
+		item      domain.CartItem
 		wantError error
 	}{
 		{
-			name:  "single order: ok",
-			order: order1,
+			name:    "add single item: ok",
+			ownerID: gofakeit.UUID(),
+			item:    item1,
 		},
 		{
-			name:  "single order, no items: ok",
-			order: order2,
+			name:    "add another item: ok",
+			ownerID: gofakeit.UUID(),
+			item:    item2,
 		},
 	}
 
@@ -92,47 +93,69 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 			t := suite.T()
 			ctx := t.Context()
 
-			orderID, err := suite.repo.InsertOrder(ctx, tt.order)
-			if err != nil {
-				require.ErrorIs(t, err, tt.wantError)
-				return
-			}
-
-			actualOrder, err := suite.repo.GetOrder(ctx, orderID)
+			err := suite.repo.AddItem(ctx, tt.ownerID, tt.item)
 			require.NoError(t, err)
 
-			expectedOrder := domain.Order{
-				ID:      orderID,
-				OwnerID: tt.order.OwnerID,
-				Items:   tt.order.Items,
+			actualCart, err := suite.repo.GetCart(ctx, tt.ownerID)
+			require.NoError(t, err)
+
+			expectedCart := domain.Cart{
+				OwnerID: tt.ownerID,
+				Items:   []domain.CartItem{tt.item},
 			}
 
-			assertOrder(t, expectedOrder, actualOrder)
+			assertCart(t, expectedCart, actualCart)
 		})
 	}
 }
 
-func fakeOrder() domain.Order {
-	var items []domain.OrderItem
-	for i := 0; i < gofakeit.Number(1, 5); i++ {
-		items = append(items, fakeOrderItem())
+func (suite *cartRepositorySuite) TestDeleteItem() {
+	item := fakeCartItem()
+	ownerID := gofakeit.UUID()
+
+	suite.repo.AddItem(suite.T().Context(), ownerID, item)
+
+	tests := []struct {
+		name      string
+		ownerID   string
+		productID uuid.UUID
+		wantFound bool
+		wantError error
+	}{
+		{
+			name:      "delete existing item: ok",
+			ownerID:   ownerID,
+			productID: item.ProductID,
+			wantFound: true,
+		},
+		{
+			name:      "delete non-existing item: not found",
+			ownerID:   ownerID,
+			productID: uuid.New(),
+			wantFound: false,
+		},
 	}
 
-	return domain.Order{
-		ID:      uuid.MustParse(gofakeit.UUID()),
-		OwnerID: gofakeit.UUID(),
-		Items:   items,
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			t := suite.T()
+			ctx := t.Context()
+
+			found, err := suite.repo.DeleteItem(ctx, tt.ownerID, tt.productID)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantFound, found)
+		})
 	}
 }
 
-func fakeOrderItem() domain.OrderItem {
+func fakeCartItem() domain.CartItem {
 	productID := uuid.MustParse(gofakeit.UUID())
 
 	price := gofakeit.Price(1, 100)
 
 	currencyUnit := currency.MustParseISO(gofakeit.CurrencyShort())
 
-	return domain.OrderItem{
+	return domain.CartItem{
 		ProductID: productID,
 		Price: domain.Money{
 			Amount:   decimal.NewFromFloat(price),
@@ -141,7 +164,7 @@ func fakeOrderItem() domain.OrderItem {
 	}
 }
 
-func assertOrder(t *testing.T, expected domain.Order, actual domain.Order) {
+func assertCart(t *testing.T, expected domain.Cart, actual domain.Cart) {
 	t.Helper()
 
 	// Custom comparer for Money.Currency fields
@@ -149,17 +172,13 @@ func assertOrder(t *testing.T, expected domain.Order, actual domain.Order) {
 		return x.String() == y.String()
 	})
 
-	// Ignore the CreatedAt field in OrderItem and
+	// Ignore the CreatedAt field in CartItem and
 	// Treat empty slices as equal to nil
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(domain.OrderItem{}, "CreatedAt"),
-		cmpopts.IgnoreFields(domain.Order{}, "CreatedAt", "UpdatedAt"),
+		cmpopts.IgnoreFields(domain.CartItem{}, "CreatedAt"),
 		cmpopts.EquateEmpty(),
 	}
 
 	diff := cmp.Diff(expected, actual, comparer, opts)
 	assert.Empty(t, diff)
-
-	assert.False(t, actual.CreatedAt.IsZero())
-	assert.False(t, actual.UpdatedAt.IsZero())
 }
