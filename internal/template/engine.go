@@ -37,7 +37,14 @@ func (e *Engine) Execute() (string, error) {
 		return "", fmt.Errorf("tmpl.Execute: %w", err)
 	}
 
-	return output.String(), nil
+	outputStr := output.String()
+
+	// Check if there are any unresolved placeholders
+	if strings.Contains(outputStr, "<no value>") {
+		return "", fmt.Errorf("unresolved placeholders found in the template")
+	}
+
+	return outputStr, nil
 }
 
 func (e *Engine) resolveFiles() (map[string]string, error) {

@@ -16,7 +16,7 @@ func main() {
 
 	data := template.BuildRepositoryDataMap("cart")
 
-	engine := template.NewEngine("internal/template/data/repository.tmpl", data)
+	engine := template.NewEngine("internal/template/data/repository_test.tmpl", data)
 
 	request, err := engine.Execute()
 	if err != nil {
