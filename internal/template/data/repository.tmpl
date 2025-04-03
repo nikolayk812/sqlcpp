@@ -7,6 +7,8 @@ Do not use withTx methods, if there is a single call to sqlc query from a reposi
 
 Follow this pattern of creating an empty var o domain.Order and returning it only for error cases.
 
+Create 2 New constructor methods one for *pgxpool.Pool and one for pgx.Tx
+
 No need to explain anything, provide only generated Go code according to provided interface in the end.
 
 ### Generated models/records by sqlc ###
