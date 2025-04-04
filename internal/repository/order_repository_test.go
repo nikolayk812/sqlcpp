@@ -68,7 +68,13 @@ func (suite *orderRepositorySuite) TearDownSuite() {
 }
 
 func (suite *orderRepositorySuite) TestInsertOrder() {
+	defer suite.deleteAll()
+
 	order1 := fakeOrder()
+
+	order2 := fakeOrder()
+	order2.Tags = nil
+	order2.Url = nil
 
 	badOrder := fakeOrder()
 	badOrder.Items = nil
@@ -87,6 +93,10 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 			order:     badOrder,
 			wantError: "no items in order",
 		},
+		{
+			name:  "single order, nil tags, nil url: ok",
+			order: order2,
+		},
 	}
 
 	for _, tt := range tests {
@@ -97,26 +107,89 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 			o := tt.order
 
 			orderID, err := suite.repo.InsertOrder(ctx, o)
-			if err != nil {
-				assert.EqualError(t, err, tt.wantError)
+			if tt.wantError != "" {
+				require.EqualError(t, err, tt.wantError)
 				return
 			}
 
 			actualOrder, err := suite.repo.GetOrder(ctx, orderID)
 			require.NoError(t, err)
 
-			expectedOrder := domain.Order{
-				ID:      orderID,
-				OwnerID: o.OwnerID,
-				Items:   o.Items,
-				Url:     o.Url,
-				Status:  domain.OrderStatusPending,
-				Tags:    o.Tags,
-			}
+			expected := o
+			expected.ID = orderID
+			expected.Status = domain.OrderStatusPending
 
-			assertOrder(t, expectedOrder, actualOrder)
+			assertOrder(t, expected, actualOrder)
 		})
 	}
+}
+
+func (suite *orderRepositorySuite) TestGetOrderJoin() {
+	defer suite.deleteAll()
+
+	order1 := fakeOrder()
+
+	order2 := fakeOrder()
+	order2.Tags = nil
+	order2.Url = nil
+
+	tests := []struct {
+		name      string
+		order     domain.Order
+		wantError string
+	}{
+		{
+			name:  "existing order: ok",
+			order: order1,
+		},
+		{
+			name:      "non-existing order: not ok",
+			order:     domain.Order{ID: uuid.MustParse(gofakeit.UUID())},
+			wantError: "order not found",
+		},
+		{
+			name:  "single order, nil tags, nil url: ok",
+			order: order2,
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			t := suite.T()
+
+			o := tt.order
+
+			var (
+				orderID uuid.UUID
+				err     error
+			)
+
+			if o.ID == uuid.Nil {
+				orderID, err = suite.repo.InsertOrder(t.Context(), o)
+				require.NoError(t, err)
+			} else {
+				orderID = o.ID
+			}
+
+			actualOrder, err := suite.repo.GetOrderJoin(t.Context(), orderID)
+			if tt.wantError != "" {
+				require.EqualError(t, err, tt.wantError)
+				return
+			}
+			require.NoError(t, err)
+
+			expected := o
+			expected.ID = orderID
+			expected.Status = domain.OrderStatusPending
+
+			assertOrder(t, expected, actualOrder)
+		})
+	}
+}
+
+func (suite *orderRepositorySuite) deleteAll() {
+	_, err := suite.pool.Exec(suite.T().Context(), "TRUNCATE TABLE orders, order_items CASCADE")
+	suite.NoError(err)
 }
 
 func fakeOrder() domain.Order {
@@ -131,7 +204,7 @@ func fakeOrder() domain.Order {
 	}
 
 	return domain.Order{
-		ID:      uuid.MustParse(gofakeit.UUID()),
+		// ID:      uuid.MustParse(gofakeit.UUID()),
 		OwnerID: gofakeit.UUID(),
 		Items:   items,
 		Url:     fakeURL(),

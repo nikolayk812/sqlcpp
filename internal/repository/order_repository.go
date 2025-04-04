@@ -62,6 +62,36 @@ func (r *orderRepository) GetOrder(ctx context.Context, orderID uuid.UUID) (doma
 	return order, nil
 }
 
+func (r *orderRepository) GetOrderJoin(ctx context.Context, orderID uuid.UUID) (domain.Order, error) {
+	var o domain.Order
+
+	dbOrderItemsRows, err := r.q.GetOrderJoinItems(ctx, orderID)
+	if err != nil {
+		return o, fmt.Errorf("q.GetOrderJoinItems: %w", err)
+	}
+
+	if len(dbOrderItemsRows) == 0 {
+		return o, fmt.Errorf("order not found")
+	}
+
+	// Map the first row to domain.Order
+	order, err := mapGetOrderJoinItemsRowToDomainOrder(dbOrderItemsRows[0])
+	if err != nil {
+		return o, fmt.Errorf("mapGetOrderJoinItemsRowToDomainOrder: %w", err)
+	}
+
+	// Iterate over the rows and map to domain.OrderItem
+	for _, row := range dbOrderItemsRows {
+		item, err := mapGetOrderJoinItemsRowToDomainOrderItem(row)
+		if err != nil {
+			return o, fmt.Errorf("mapGetOrderJoinItemsRowToDomainOrderItem: %w", err)
+		}
+		order.Items = append(order.Items, item)
+	}
+
+	return order, nil
+}
+
 func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (uuid.UUID, error) {
 	if len(order.Items) == 0 {
 		return uuid.Nil, errors.New("no items in order")
@@ -157,7 +187,7 @@ func mapDBOrderToDomain(dbOrder db.GetOrderRow, dbOrderItems []db.GetOrderItemsR
 
 	var parsedURL *url.URL
 
-	if dbOrder.Url != nil {
+	if lo.FromPtr(dbOrder.Url) != "" {
 		parsedURL, err = url.Parse(*dbOrder.Url)
 		if err != nil {
 			return o, fmt.Errorf("url.Parse[%s]: %w", *dbOrder.Url, err)
@@ -178,6 +208,49 @@ func mapDBOrderToDomain(dbOrder db.GetOrderRow, dbOrderItems []db.GetOrderItemsR
 		Status:    status,
 		Url:       parsedURL,
 		Tags:      dbOrder.Tags,
+	}, nil
+}
+
+func mapGetOrderJoinItemsRowToDomainOrder(row db.GetOrderJoinItemsRow) (domain.Order, error) {
+	var (
+		o         domain.Order
+		parsedURL *url.URL
+		err       error
+	)
+
+	if lo.FromPtr(row.Url) != "" {
+		parsedURL, err = url.Parse(*row.Url)
+		if err != nil {
+			return o, fmt.Errorf("url.Parse[%s]: %w", *row.Url, err)
+		}
+	}
+
+	status, err := domain.ToOrderStatus(row.Status)
+	if err != nil {
+		return o, fmt.Errorf("domain.ToOrderStatus[%s]: %w", row.Status, err)
+	}
+
+	return domain.Order{
+		ID:        row.ID,
+		OwnerID:   row.OwnerID,
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt,
+		Status:    status,
+		Url:       parsedURL,
+		Tags:      row.Tags,
+	}, nil
+}
+
+func mapGetOrderJoinItemsRowToDomainOrderItem(row db.GetOrderJoinItemsRow) (domain.OrderItem, error) {
+	parsedCurrency, err := currency.ParseISO(row.PriceCurrency)
+	if err != nil {
+		return domain.OrderItem{}, fmt.Errorf("currency[%s] is not valid: %w", row.PriceCurrency, err)
+	}
+
+	return domain.OrderItem{
+		ProductID: row.ProductID,
+		Price:     domain.Money{Amount: row.PriceAmount, Currency: parsedCurrency},
+		CreatedAt: row.CreatedAt,
 	}, nil
 }
 

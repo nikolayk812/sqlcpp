@@ -8,5 +8,7 @@ import (
 
 type OrderRepository interface {
 	GetOrder(ctx context.Context, orderID uuid.UUID) (domain.Order, error)
+	GetOrderJoin(ctx context.Context, orderID uuid.UUID) (domain.Order, error)
+
 	InsertOrder(ctx context.Context, order domain.Order) (uuid.UUID, error)
 }

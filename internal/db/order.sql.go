@@ -82,6 +82,59 @@ func (q *Queries) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]GetOr
 	return items, nil
 }
 
+const getOrderJoinItems = `-- name: GetOrderJoinItems :many
+SELECT
+    o.id, o.owner_id, o.created_at, o.updated_at, o.url, o.status, o.tags,
+    oi.product_id, oi.price_amount, oi.price_currency
+FROM orders o
+         JOIN order_items oi ON o.id = oi.order_id
+WHERE o.id = $1
+`
+
+type GetOrderJoinItemsRow struct {
+	ID            uuid.UUID
+	OwnerID       string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Url           *string
+	Status        string
+	Tags          []string
+	ProductID     uuid.UUID
+	PriceAmount   decimal.Decimal
+	PriceCurrency string
+}
+
+func (q *Queries) GetOrderJoinItems(ctx context.Context, id uuid.UUID) ([]GetOrderJoinItemsRow, error) {
+	rows, err := q.db.Query(ctx, getOrderJoinItems, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetOrderJoinItemsRow
+	for rows.Next() {
+		var i GetOrderJoinItemsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Url,
+			&i.Status,
+			&i.Tags,
+			&i.ProductID,
+			&i.PriceAmount,
+			&i.PriceCurrency,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertOrder = `-- name: InsertOrder :one
 INSERT INTO orders (owner_id, url, tags)
 VALUES ($1, $2, $3)
