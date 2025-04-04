@@ -24,6 +24,9 @@ type Order struct {
 	OwnerID   string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	Url       *string
+	Tags      []string
+	Status    string
 }
 
 type OrderItem struct {

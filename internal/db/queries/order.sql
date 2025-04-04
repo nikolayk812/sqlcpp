@@ -1,11 +1,11 @@
 -- name: GetOrder :one
-SELECT id, owner_id, created_at, updated_at
+SELECT id, owner_id, created_at, updated_at, url, status, tags
 FROM orders
 WHERE id = $1;
 
 -- name: InsertOrder :one
-INSERT INTO orders (owner_id)
-VALUES ($1)
+INSERT INTO orders (owner_id, url, tags)
+VALUES ($1, $2, $3)
 RETURNING id;
 
 -- name: GetOrderItems :many

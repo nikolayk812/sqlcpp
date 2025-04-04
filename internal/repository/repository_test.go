@@ -12,7 +12,8 @@ func startPostgres(ctx context.Context) (testcontainers.Container, string, error
 		postgres.BasicWaitStrategies(),
 		postgres.WithInitScripts(
 			"../migrations/01_cart_items.up.sql",
-			"../migrations/02_orders.up.sql"),
+			"../migrations/02_orders.up.sql",
+			"../migrations/03_orders_complex.up.sql"),
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("postgres.Run: %w", err)

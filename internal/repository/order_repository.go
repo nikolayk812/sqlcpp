@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -9,7 +10,9 @@ import (
 	"github.com/nikolayk812/sqlcpp/internal/db"
 	"github.com/nikolayk812/sqlcpp/internal/domain"
 	"github.com/nikolayk812/sqlcpp/internal/port"
+	"github.com/samber/lo"
 	"golang.org/x/text/currency"
+	"net/url"
 )
 
 type orderRepository struct {
@@ -60,15 +63,24 @@ func (r *orderRepository) GetOrder(ctx context.Context, orderID uuid.UUID) (doma
 }
 
 func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (uuid.UUID, error) {
+	if len(order.Items) == 0 {
+		return uuid.Nil, errors.New("no items in order")
+	}
+
 	var orderID uuid.UUID
 
 	orderID, err := r.withTxUUID(ctx, func(q *db.Queries) (uuid.UUID, error) {
 		// Insert the order and get the generated order ID
-		orderID, err := q.InsertOrder(ctx, order.OwnerID)
+		orderID, err := q.InsertOrder(ctx, db.InsertOrderParams{
+			OwnerID: order.OwnerID,
+			Url:     lo.ToPtr(urlToString(order.Url)),
+			Tags:    order.Tags,
+		})
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("q.InsertOrder: %w", err)
 		}
 
+		// TODO: join or batch
 		// Insert each order item
 		for _, item := range order.Items {
 			arg := db.InsertOrderItemParams{
@@ -135,10 +147,26 @@ func mapGetOrderRowsToDomain(rows []db.GetOrderItemsRow) ([]domain.OrderItem, er
 	return items, nil
 }
 
-func mapDBOrderToDomain(dbOrder db.Order, dbOrderItems []db.GetOrderItemsRow) (domain.Order, error) {
+func mapDBOrderToDomain(dbOrder db.GetOrderRow, dbOrderItems []db.GetOrderItemsRow) (domain.Order, error) {
+	var o domain.Order
+
 	items, err := mapGetOrderRowsToDomain(dbOrderItems)
 	if err != nil {
-		return domain.Order{}, fmt.Errorf("mapGetOrderRowsToDomain: %w", err)
+		return o, fmt.Errorf("mapGetOrderRowsToDomain: %w", err)
+	}
+
+	var parsedURL *url.URL
+
+	if dbOrder.Url != nil {
+		parsedURL, err = url.Parse(*dbOrder.Url)
+		if err != nil {
+			return o, fmt.Errorf("url.Parse[%s]: %w", *dbOrder.Url, err)
+		}
+	}
+
+	status, err := domain.ToOrderStatus(dbOrder.Status)
+	if err != nil {
+		return o, fmt.Errorf("domain.ToOrderStatus[%s]: %w", dbOrder.Status, err)
 	}
 
 	return domain.Order{
@@ -147,5 +175,15 @@ func mapDBOrderToDomain(dbOrder db.Order, dbOrderItems []db.GetOrderItemsRow) (d
 		Items:     items,
 		CreatedAt: dbOrder.CreatedAt,
 		UpdatedAt: dbOrder.UpdatedAt,
+		Status:    status,
+		Url:       parsedURL,
+		Tags:      dbOrder.Tags,
 	}, nil
+}
+
+func urlToString(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	return u.String()
 }

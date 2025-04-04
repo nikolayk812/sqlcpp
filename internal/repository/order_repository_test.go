@@ -16,6 +16,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"go.uber.org/goleak"
 	"golang.org/x/text/currency"
+	"net/url"
 	"testing"
 )
 
@@ -69,21 +70,22 @@ func (suite *orderRepositorySuite) TearDownSuite() {
 func (suite *orderRepositorySuite) TestInsertOrder() {
 	order1 := fakeOrder()
 
-	order2 := fakeOrder()
-	order2.Items = nil
+	badOrder := fakeOrder()
+	badOrder.Items = nil
 
 	tests := []struct {
 		name      string
 		order     domain.Order
-		wantError error
+		wantError string
 	}{
 		{
 			name:  "single order: ok",
 			order: order1,
 		},
 		{
-			name:  "single order, no items: ok",
-			order: order2,
+			name:      "single order, no items: ok",
+			order:     badOrder,
+			wantError: "no items in order",
 		},
 	}
 
@@ -92,9 +94,11 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 			t := suite.T()
 			ctx := t.Context()
 
-			orderID, err := suite.repo.InsertOrder(ctx, tt.order)
+			o := tt.order
+
+			orderID, err := suite.repo.InsertOrder(ctx, o)
 			if err != nil {
-				require.ErrorIs(t, err, tt.wantError)
+				assert.EqualError(t, err, tt.wantError)
 				return
 			}
 
@@ -103,8 +107,11 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 
 			expectedOrder := domain.Order{
 				ID:      orderID,
-				OwnerID: tt.order.OwnerID,
-				Items:   tt.order.Items,
+				OwnerID: o.OwnerID,
+				Items:   o.Items,
+				Url:     o.Url,
+				Status:  domain.OrderStatusPending,
+				Tags:    o.Tags,
 			}
 
 			assertOrder(t, expectedOrder, actualOrder)
@@ -118,10 +125,17 @@ func fakeOrder() domain.Order {
 		items = append(items, fakeOrderItem())
 	}
 
+	var tags []string
+	for i := 0; i < gofakeit.Number(1, 5); i++ {
+		tags = append(tags, gofakeit.BeerName())
+	}
+
 	return domain.Order{
 		ID:      uuid.MustParse(gofakeit.UUID()),
 		OwnerID: gofakeit.UUID(),
 		Items:   items,
+		Url:     fakeURL(),
+		Tags:    tags,
 	}
 }
 
@@ -130,7 +144,7 @@ func fakeOrderItem() domain.OrderItem {
 
 	price := gofakeit.Price(1, 100)
 
-	currencyUnit := currency.MustParseISO(gofakeit.CurrencyShort())
+	currencyUnit := fakeCurrency()
 
 	return domain.OrderItem{
 		ProductID: productID,
@@ -139,6 +153,39 @@ func fakeOrderItem() domain.OrderItem {
 			Currency: currencyUnit,
 		},
 	}
+}
+
+func fakeURL() *url.URL {
+	var (
+		result *url.URL
+		err    error
+	)
+
+	for {
+		result, err = url.Parse(gofakeit.URL())
+		if err == nil {
+			break
+		}
+	}
+
+	return result
+}
+
+func fakeCurrency() currency.Unit {
+	var (
+		result currency.Unit
+		err    error
+	)
+
+	for {
+		// tag is not a recognized currency
+		result, err = currency.ParseISO(gofakeit.CurrencyShort())
+		if err == nil {
+			break
+		}
+	}
+
+	return result
 }
 
 func assertOrder(t *testing.T, expected domain.Order, actual domain.Order) {

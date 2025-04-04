@@ -14,19 +14,32 @@ import (
 )
 
 const getOrder = `-- name: GetOrder :one
-SELECT id, owner_id, created_at, updated_at
+SELECT id, owner_id, created_at, updated_at, url, status, tags
 FROM orders
 WHERE id = $1
 `
 
-func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (Order, error) {
+type GetOrderRow struct {
+	ID        uuid.UUID
+	OwnerID   string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Url       *string
+	Status    string
+	Tags      []string
+}
+
+func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (GetOrderRow, error) {
 	row := q.db.QueryRow(ctx, getOrder, id)
-	var i Order
+	var i GetOrderRow
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Url,
+		&i.Status,
+		&i.Tags,
 	)
 	return i, err
 }
@@ -70,13 +83,19 @@ func (q *Queries) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]GetOr
 }
 
 const insertOrder = `-- name: InsertOrder :one
-INSERT INTO orders (owner_id)
-VALUES ($1)
+INSERT INTO orders (owner_id, url, tags)
+VALUES ($1, $2, $3)
 RETURNING id
 `
 
-func (q *Queries) InsertOrder(ctx context.Context, ownerID string) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, insertOrder, ownerID)
+type InsertOrderParams struct {
+	OwnerID string
+	Url     *string
+	Tags    []string
+}
+
+func (q *Queries) InsertOrder(ctx context.Context, arg InsertOrderParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertOrder, arg.OwnerID, arg.Url, arg.Tags)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
