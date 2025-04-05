@@ -14,7 +14,15 @@ import (
 )
 
 const getOrder = `-- name: GetOrder :one
-SELECT id, owner_id, created_at, updated_at, url, status, tags, payload, payloadb
+SELECT id,
+       owner_id,
+       created_at,
+       updated_at,
+       url,
+       status,
+       tags,
+       payload,
+       payloadb
 FROM orders
 WHERE id = $1
 `
@@ -87,9 +95,18 @@ func (q *Queries) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]GetOr
 }
 
 const getOrderJoinItems = `-- name: GetOrderJoinItems :many
-SELECT
-    o.id, o.owner_id, o.created_at, o.updated_at, o.url, o.status, o.tags, o.payload, o.payloadb,
-    oi.product_id, oi.price_amount, oi.price_currency
+SELECT o.id,
+       o.owner_id,
+       o.created_at,
+       o.updated_at,
+       o.url,
+       o.status,
+       o.tags,
+       o.payload,
+       o.payloadb,
+       oi.product_id,
+       oi.price_amount,
+       oi.price_currency
 FROM orders o
          JOIN order_items oi ON o.id = oi.order_id
 WHERE o.id = $1
@@ -190,4 +207,116 @@ func (q *Queries) InsertOrderItem(ctx context.Context, arg InsertOrderItemParams
 		arg.PriceCurrency,
 	)
 	return err
+}
+
+const searchOrders = `-- name: SearchOrders :many
+SELECT DISTINCT o.id,
+                o.owner_id,
+                o.created_at,
+                o.updated_at,
+                o.url,
+                o.status,
+                o.tags,
+                o.payload,
+                o.payloadb,
+                oi.product_id,
+                oi.price_amount,
+                oi.price_currency
+FROM orders o
+         JOIN order_items oi ON o.id = oi.order_id
+WHERE (
+          ($1::UUID[] IS NULL OR o.id = ANY ($1))
+              AND
+          ($2::VARCHAR[] IS NULL OR o.owner_id = ANY ($2))
+              AND
+          ($3::TEXT[] IS NULL OR EXISTS (SELECT 1
+                                                    FROM unnest($3) AS url_pattern
+                                                    WHERE o.url ILIKE '%' || url_pattern || '%'))
+              AND
+          ($4::TEXT[] IS NULL OR o.status = ANY ($4))
+              AND
+          ($5::TEXT[] IS NULL OR EXISTS (SELECT 1
+                                            FROM unnest($5) AS tag
+                                            WHERE tag = ANY ($5)))
+              AND
+          (
+              ($6::TIMESTAMP IS NULL OR o.created_at >= $6) AND
+              ($7::TIMESTAMP IS NULL OR o.created_at < $7)
+              )
+              AND
+          (
+              ($8::TIMESTAMP IS NULL OR o.updated_at >= $8) AND
+              ($9::TIMESTAMP IS NULL OR o.updated_at < $9)
+              )
+          )
+`
+
+type SearchOrdersParams struct {
+	Ids           []uuid.UUID
+	OwnerIds      []string
+	UrlPatterns   []string
+	Statuses      []string
+	Tags          []string
+	CreatedAfter  *time.Time
+	CreatedBefore *time.Time
+	UpdatedAfter  *time.Time
+	UpdatedBefore *time.Time
+}
+
+type SearchOrdersRow struct {
+	ID            uuid.UUID
+	OwnerID       string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Url           *string
+	Status        string
+	Tags          []string
+	Payload       []byte
+	Payloadb      []byte
+	ProductID     uuid.UUID
+	PriceAmount   decimal.Decimal
+	PriceCurrency string
+}
+
+func (q *Queries) SearchOrders(ctx context.Context, arg SearchOrdersParams) ([]SearchOrdersRow, error) {
+	rows, err := q.db.Query(ctx, searchOrders,
+		arg.Ids,
+		arg.OwnerIds,
+		arg.UrlPatterns,
+		arg.Statuses,
+		arg.Tags,
+		arg.CreatedAfter,
+		arg.CreatedBefore,
+		arg.UpdatedAfter,
+		arg.UpdatedBefore,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchOrdersRow
+	for rows.Next() {
+		var i SearchOrdersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Url,
+			&i.Status,
+			&i.Tags,
+			&i.Payload,
+			&i.Payloadb,
+			&i.ProductID,
+			&i.PriceAmount,
+			&i.PriceCurrency,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

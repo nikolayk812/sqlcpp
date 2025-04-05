@@ -1,6 +1,8 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+)
 
 type OrderStatus string
 
@@ -26,12 +28,4 @@ func ToOrderStatus(s string) (OrderStatus, error) {
 	}
 
 	return "", errors.New("invalid order status")
-}
-
-func OrderStatuses() []OrderStatus {
-	result := make([]OrderStatus, 0, len(validOrderStatuses))
-	for status := range validOrderStatuses {
-		result = append(result, status)
-	}
-	return result
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/samber/lo"
 	"golang.org/x/text/currency"
 	"net/url"
+	"time"
 )
 
 type orderRepository struct {
@@ -133,6 +134,69 @@ func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (
 	}
 
 	return orderID, nil
+}
+
+func mapDomainOrderFilterToDBFilter(filter domain.OrderFilter) db.SearchOrdersParams {
+	var statuses []string
+	for _, status := range filter.Statuses {
+		statuses = append(statuses, string(status))
+	}
+
+	var createdAfter, createdBefore, updatedAfter, updatedBefore *time.Time
+
+	if filter.CreatedAt != nil {
+		createdAfter = filter.CreatedAt.After
+		createdBefore = filter.CreatedAt.Before
+	}
+
+	if filter.UpdatedAt != nil {
+		updatedAfter = filter.UpdatedAt.After
+		updatedBefore = filter.UpdatedAt.Before
+	}
+
+	return db.SearchOrdersParams{
+		Ids:           nilSliceIfEmpty(filter.IDs),
+		OwnerIds:      nilSliceIfEmpty(filter.OwnerIDs),
+		UrlPatterns:   nilSliceIfEmpty(filter.UrlPatterns),
+		Statuses:      nilSliceIfEmpty(statuses),
+		Tags:          nilSliceIfEmpty(filter.Tags),
+		CreatedAfter:  createdAfter,
+		CreatedBefore: createdBefore,
+		UpdatedAfter:  updatedAfter,
+		UpdatedBefore: updatedBefore,
+	}
+}
+
+func (r *orderRepository) SearchOrders(ctx context.Context, filter domain.OrderFilter) ([]domain.Order, error) {
+	dbFilter := mapDomainOrderFilterToDBFilter(filter)
+
+	dbOrders, err := r.q.SearchOrders(ctx, dbFilter)
+	if err != nil {
+		return nil, fmt.Errorf("q.SearchOrders: %w", err)
+	}
+
+	// Use a map to group orders and their items
+	orderMap := make(map[uuid.UUID]domain.Order)
+	for _, row := range dbOrders {
+		if _, exists := orderMap[row.ID]; !exists {
+			order, err := mapSearchOrdersRowToDomainOrder(row)
+			if err != nil {
+				return nil, fmt.Errorf("mapSearchOrdersRowToDomainOrder: %w", err)
+			}
+			orderMap[row.ID] = order
+		}
+
+		item, err := mapSearchOrdersRowToDomainOrderItem(row)
+		if err != nil {
+			return nil, fmt.Errorf("mapSearchOrdersRowToDomainOrderItem: %w", err)
+		}
+
+		order := orderMap[row.ID]
+		order.Items = append(order.Items, item)
+		orderMap[row.ID] = order
+	}
+
+	return lo.Values(orderMap), nil
 }
 
 func (r *orderRepository) withTx(ctx context.Context, fn func(q *db.Queries) error) error {
@@ -260,6 +324,48 @@ func mapGetOrderJoinItemsRowToDomain(row db.GetOrderJoinItemsRow) (domain.OrderI
 	}, nil
 }
 
+func mapSearchOrdersRowToDomainOrder(row db.SearchOrdersRow) (domain.Order, error) {
+	var (
+		o         domain.Order
+		parsedURL *url.URL
+		err       error
+	)
+
+	if lo.FromPtr(row.Url) != "" {
+		parsedURL, err = url.Parse(*row.Url)
+		if err != nil {
+			return o, fmt.Errorf("url.Parse[%s]: %w", *row.Url, err)
+		}
+	}
+
+	status, err := domain.ToOrderStatus(row.Status)
+	if err != nil {
+		return o, fmt.Errorf("domain.ToOrderStatus[%s]: %w", row.Status, err)
+	}
+
+	return domain.Order{
+		ID:       row.ID,
+		OwnerID:  row.OwnerID,
+		Status:   status,
+		Url:      parsedURL,
+		Tags:     row.Tags,
+		Payload:  row.Payload,
+		PayloadB: row.Payloadb,
+	}, nil
+}
+
+func mapSearchOrdersRowToDomainOrderItem(row db.SearchOrdersRow) (domain.OrderItem, error) {
+	parsedCurrency, err := currency.ParseISO(row.PriceCurrency)
+	if err != nil {
+		return domain.OrderItem{}, fmt.Errorf("currency[%s] is not valid: %w", row.PriceCurrency, err)
+	}
+
+	return domain.OrderItem{
+		ProductID: row.ProductID,
+		Price:     domain.Money{Amount: row.PriceAmount, Currency: parsedCurrency},
+	}, nil
+}
+
 func urlToString(u *url.URL) string {
 	if u == nil {
 		return ""
@@ -272,4 +378,11 @@ func emptyJSONIfNil(j []byte) []byte {
 		return []byte(`{}`)
 	}
 	return j
+}
+
+func nilSliceIfEmpty[T any](s []T) []T {
+	if len(s) == 0 {
+		return nil
+	}
+	return s
 }
