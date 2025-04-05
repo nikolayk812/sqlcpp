@@ -1,6 +1,7 @@
 package repository_test
 
 import (
+	"encoding/json"
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -132,11 +133,14 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 	order2 := fakeOrder()
 	order2.Tags = nil
 	order2.Url = nil
+	order2.Payload = nil
+	order2.PayloadB = nil
 
 	tests := []struct {
-		name      string
-		order     domain.Order
-		wantError string
+		name       string
+		order      domain.Order
+		expectFunc func(*domain.Order)
+		wantError  string
 	}{
 		{
 			name:  "existing order: ok",
@@ -148,8 +152,11 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 			wantError: "order not found",
 		},
 		{
-			name:  "single order, nil tags, nil url: ok",
+			name:  "single order, most fields nil: ok",
 			order: order2,
+			expectFunc: func(o *domain.Order) {
+				o.Payload = []byte(`{}`)
+			},
 		},
 	}
 
@@ -182,6 +189,10 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 			expected.ID = orderID
 			expected.Status = domain.OrderStatusPending
 
+			if tt.expectFunc != nil {
+				tt.expectFunc(&expected)
+			}
+
 			assertOrder(t, expected, actualOrder)
 		})
 	}
@@ -204,11 +215,13 @@ func fakeOrder() domain.Order {
 	}
 
 	return domain.Order{
-		// ID:      uuid.MustParse(gofakeit.UUID()),
-		OwnerID: gofakeit.UUID(),
-		Items:   items,
-		Url:     fakeURL(),
-		Tags:    tags,
+		ID:       uuid.Nil,
+		OwnerID:  gofakeit.UUID(),
+		Items:    items,
+		Url:      fakeURL(),
+		Tags:     tags,
+		Payload:  fakeJson(),
+		PayloadB: fakeJson(),
 	}
 }
 
@@ -261,12 +274,44 @@ func fakeCurrency() currency.Unit {
 	return result
 }
 
+func fakeJson() []byte {
+	var (
+		result []byte
+		err    error
+	)
+
+	for {
+		result, err = gofakeit.JSON(nil)
+		if err == nil {
+			break
+		}
+	}
+
+	return result
+}
+
 func assertOrder(t *testing.T, expected domain.Order, actual domain.Order) {
 	t.Helper()
 
-	// Custom comparer for Money.Currency fields
-	comparer := cmp.Comparer(func(x, y currency.Unit) bool {
+	currencyComparer := cmp.Comparer(func(x, y currency.Unit) bool {
 		return x.String() == y.String()
+	})
+
+	jsonComparer := cmp.Comparer(func(x, y []byte) bool {
+		if x == nil && y == nil {
+			return true
+		}
+
+		var normalizedX, normalizedY interface{}
+
+		if err := json.Unmarshal(x, &normalizedX); err != nil {
+			return false
+		}
+		if err := json.Unmarshal(y, &normalizedY); err != nil {
+			return false
+		}
+
+		return cmp.Equal(normalizedX, normalizedY)
 	})
 
 	// Ignore the CreatedAt field in OrderItem and
@@ -274,10 +319,14 @@ func assertOrder(t *testing.T, expected domain.Order, actual domain.Order) {
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(domain.OrderItem{}, "CreatedAt"),
 		cmpopts.IgnoreFields(domain.Order{}, "CreatedAt", "UpdatedAt"),
-		cmpopts.EquateEmpty(),
+		// cmpopts.EquateEmpty(),
+		currencyComparer,
+		cmp.FilterPath(func(p cmp.Path) bool {
+			return p.Last().String() == ".Payload" || p.Last().String() == ".PayloadB"
+		}, jsonComparer),
 	}
 
-	diff := cmp.Diff(expected, actual, comparer, opts)
+	diff := cmp.Diff(expected, actual, opts)
 	assert.Empty(t, diff)
 
 	assert.False(t, actual.CreatedAt.IsZero())

@@ -14,7 +14,7 @@ import (
 )
 
 const getOrder = `-- name: GetOrder :one
-SELECT id, owner_id, created_at, updated_at, url, status, tags
+SELECT id, owner_id, created_at, updated_at, url, status, tags, payload, payloadb
 FROM orders
 WHERE id = $1
 `
@@ -27,6 +27,8 @@ type GetOrderRow struct {
 	Url       *string
 	Status    string
 	Tags      []string
+	Payload   []byte
+	Payloadb  []byte
 }
 
 func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (GetOrderRow, error) {
@@ -40,6 +42,8 @@ func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (GetOrderRow, erro
 		&i.Url,
 		&i.Status,
 		&i.Tags,
+		&i.Payload,
+		&i.Payloadb,
 	)
 	return i, err
 }
@@ -84,7 +88,7 @@ func (q *Queries) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]GetOr
 
 const getOrderJoinItems = `-- name: GetOrderJoinItems :many
 SELECT
-    o.id, o.owner_id, o.created_at, o.updated_at, o.url, o.status, o.tags,
+    o.id, o.owner_id, o.created_at, o.updated_at, o.url, o.status, o.tags, o.payload, o.payloadb,
     oi.product_id, oi.price_amount, oi.price_currency
 FROM orders o
          JOIN order_items oi ON o.id = oi.order_id
@@ -99,6 +103,8 @@ type GetOrderJoinItemsRow struct {
 	Url           *string
 	Status        string
 	Tags          []string
+	Payload       []byte
+	Payloadb      []byte
 	ProductID     uuid.UUID
 	PriceAmount   decimal.Decimal
 	PriceCurrency string
@@ -121,6 +127,8 @@ func (q *Queries) GetOrderJoinItems(ctx context.Context, id uuid.UUID) ([]GetOrd
 			&i.Url,
 			&i.Status,
 			&i.Tags,
+			&i.Payload,
+			&i.Payloadb,
 			&i.ProductID,
 			&i.PriceAmount,
 			&i.PriceCurrency,
@@ -136,19 +144,27 @@ func (q *Queries) GetOrderJoinItems(ctx context.Context, id uuid.UUID) ([]GetOrd
 }
 
 const insertOrder = `-- name: InsertOrder :one
-INSERT INTO orders (owner_id, url, tags)
-VALUES ($1, $2, $3)
+INSERT INTO orders (owner_id, url, tags, payload, payloadb)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id
 `
 
 type InsertOrderParams struct {
-	OwnerID string
-	Url     *string
-	Tags    []string
+	OwnerID  string
+	Url      *string
+	Tags     []string
+	Payload  []byte
+	Payloadb []byte
 }
 
 func (q *Queries) InsertOrder(ctx context.Context, arg InsertOrderParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, insertOrder, arg.OwnerID, arg.Url, arg.Tags)
+	row := q.db.QueryRow(ctx, insertOrder,
+		arg.OwnerID,
+		arg.Url,
+		arg.Tags,
+		arg.Payload,
+		arg.Payloadb,
+	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

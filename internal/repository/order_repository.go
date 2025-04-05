@@ -82,9 +82,9 @@ func (r *orderRepository) GetOrderJoin(ctx context.Context, orderID uuid.UUID) (
 
 	// Iterate over the rows and map to domain.OrderItem
 	for _, row := range dbOrderItemsRows {
-		item, err := mapGetOrderJoinItemsRowToDomainOrderItem(row)
+		item, err := mapGetOrderJoinItemsRowToDomain(row)
 		if err != nil {
-			return o, fmt.Errorf("mapGetOrderJoinItemsRowToDomainOrderItem: %w", err)
+			return o, fmt.Errorf("mapGetOrderJoinItemsRowToDomain: %w", err)
 		}
 		order.Items = append(order.Items, item)
 	}
@@ -102,9 +102,11 @@ func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (
 	orderID, err := r.withTxUUID(ctx, func(q *db.Queries) (uuid.UUID, error) {
 		// Insert the order and get the generated order ID
 		orderID, err := q.InsertOrder(ctx, db.InsertOrderParams{
-			OwnerID: order.OwnerID,
-			Url:     lo.ToPtr(urlToString(order.Url)),
-			Tags:    order.Tags,
+			OwnerID:  order.OwnerID,
+			Url:      lo.ToPtr(urlToString(order.Url)),
+			Tags:     order.Tags,
+			Payload:  emptyJSONIfNil(order.Payload),
+			Payloadb: order.PayloadB,
 		})
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("q.InsertOrder: %w", err)
@@ -208,6 +210,8 @@ func mapDBOrderToDomain(dbOrder db.GetOrderRow, dbOrderItems []db.GetOrderItemsR
 		Status:    status,
 		Url:       parsedURL,
 		Tags:      dbOrder.Tags,
+		Payload:   dbOrder.Payload,
+		PayloadB:  dbOrder.Payloadb,
 	}, nil
 }
 
@@ -238,10 +242,12 @@ func mapGetOrderJoinItemsRowToDomainOrder(row db.GetOrderJoinItemsRow) (domain.O
 		Status:    status,
 		Url:       parsedURL,
 		Tags:      row.Tags,
+		Payload:   row.Payload,
+		PayloadB:  row.Payloadb,
 	}, nil
 }
 
-func mapGetOrderJoinItemsRowToDomainOrderItem(row db.GetOrderJoinItemsRow) (domain.OrderItem, error) {
+func mapGetOrderJoinItemsRowToDomain(row db.GetOrderJoinItemsRow) (domain.OrderItem, error) {
 	parsedCurrency, err := currency.ParseISO(row.PriceCurrency)
 	if err != nil {
 		return domain.OrderItem{}, fmt.Errorf("currency[%s] is not valid: %w", row.PriceCurrency, err)
@@ -259,4 +265,11 @@ func urlToString(u *url.URL) string {
 		return ""
 	}
 	return u.String()
+}
+
+func emptyJSONIfNil(j []byte) []byte {
+	if j == nil {
+		return []byte(`{}`)
+	}
+	return j
 }

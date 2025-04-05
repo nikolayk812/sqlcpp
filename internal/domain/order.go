@@ -7,12 +7,14 @@ import (
 )
 
 type Order struct {
-	ID      uuid.UUID
-	OwnerID string
-	Items   []OrderItem
-	Url     *url.URL
-	Status  OrderStatus
-	Tags    []string
+	ID       uuid.UUID
+	OwnerID  string
+	Items    []OrderItem
+	Url      *url.URL
+	Status   OrderStatus
+	Tags     []string
+	Payload  []byte
+	PayloadB []byte
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

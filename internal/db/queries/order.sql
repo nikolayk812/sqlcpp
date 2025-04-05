@@ -1,11 +1,11 @@
 -- name: GetOrder :one
-SELECT id, owner_id, created_at, updated_at, url, status, tags
+SELECT id, owner_id, created_at, updated_at, url, status, tags, payload, payloadb
 FROM orders
 WHERE id = $1;
 
 -- name: InsertOrder :one
-INSERT INTO orders (owner_id, url, tags)
-VALUES ($1, $2, $3)
+INSERT INTO orders (owner_id, url, tags, payload, payloadb)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id;
 
 -- name: GetOrderItems :many
@@ -19,7 +19,7 @@ VALUES ($1, $2, $3, $4);
 
 -- name: GetOrderJoinItems :many
 SELECT
-    o.id, o.owner_id, o.created_at, o.updated_at, o.url, o.status, o.tags,
+    o.id, o.owner_id, o.created_at, o.updated_at, o.url, o.status, o.tags, o.payload, o.payloadb,
     oi.product_id, oi.price_amount, oi.price_currency
 FROM orders o
          JOIN order_items oi ON o.id = oi.order_id

@@ -39,23 +39,27 @@ func (r *cartRepository) GetCart(ctx context.Context, ownerID string) (domain.Ca
 		return c, fmt.Errorf("q.GetCart: %w", err)
 	}
 
-	domainCart, err := mapDBCartToDomain(ownerID, dbCartItems)
+	items, err := mapGetCartRowsToDomain(dbCartItems)
 	if err != nil {
-		return c, fmt.Errorf("mapDBCartToDomain: %w", err)
+		return c, fmt.Errorf("mapGetCartRowsToDomain: %w", err)
 	}
 
-	return domainCart, nil
+	return domain.Cart{
+		OwnerID: ownerID,
+		Items:   items,
+	}, nil
 }
 
 func (r *cartRepository) AddItem(ctx context.Context, ownerID string, item domain.CartItem) error {
-	arg := db.AddItemParams{
+	parsedCurrency := item.Price.Currency.String()
+
+	err := r.q.AddItem(ctx, db.AddItemParams{
 		OwnerID:       ownerID,
 		ProductID:     item.ProductID,
 		PriceAmount:   item.Price.Amount,
-		PriceCurrency: item.Price.Currency.String(),
-	}
-
-	if err := r.q.AddItem(ctx, arg); err != nil {
+		PriceCurrency: parsedCurrency,
+	})
+	if err != nil {
 		return fmt.Errorf("q.AddItem: %w", err)
 	}
 
@@ -63,12 +67,10 @@ func (r *cartRepository) AddItem(ctx context.Context, ownerID string, item domai
 }
 
 func (r *cartRepository) DeleteItem(ctx context.Context, ownerID string, productID uuid.UUID) (bool, error) {
-	arg := db.DeleteItemParams{
+	rowsAffected, err := r.q.DeleteItem(ctx, db.DeleteItemParams{
 		OwnerID:   ownerID,
 		ProductID: productID,
-	}
-
-	rowsAffected, err := r.q.DeleteItem(ctx, arg)
+	})
 	if err != nil {
 		return false, fmt.Errorf("q.DeleteItem: %w", err)
 	}
@@ -102,16 +104,4 @@ func mapGetCartRowsToDomain(rows []db.GetCartRow) ([]domain.CartItem, error) {
 	}
 
 	return items, nil
-}
-
-func mapDBCartToDomain(ownerID string, dbCartItems []db.GetCartRow) (domain.Cart, error) {
-	items, err := mapGetCartRowsToDomain(dbCartItems)
-	if err != nil {
-		return domain.Cart{}, fmt.Errorf("mapGetCartRowsToDomain: %w", err)
-	}
-
-	return domain.Cart{
-		OwnerID: ownerID,
-		Items:   items,
-	}, nil
 }

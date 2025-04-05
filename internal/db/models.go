@@ -27,6 +27,8 @@ type Order struct {
 	Url       *string
 	Tags      []string
 	Status    string
+	Payload   []byte
+	Payloadb  []byte
 }
 
 type OrderItem struct {
