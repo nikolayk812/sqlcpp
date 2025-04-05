@@ -168,6 +168,10 @@ func mapDomainOrderFilterToDBFilter(filter domain.OrderFilter) db.SearchOrdersPa
 }
 
 func (r *orderRepository) SearchOrders(ctx context.Context, filter domain.OrderFilter) ([]domain.Order, error) {
+	if err := filter.Validate(); err != nil {
+		return nil, fmt.Errorf("filter.Validate: %w", err)
+	}
+
 	dbFilter := mapDomainOrderFilterToDBFilter(filter)
 
 	dbOrders, err := r.q.SearchOrders(ctx, dbFilter)
@@ -344,13 +348,15 @@ func mapSearchOrdersRowToDomainOrder(row db.SearchOrdersRow) (domain.Order, erro
 	}
 
 	return domain.Order{
-		ID:       row.ID,
-		OwnerID:  row.OwnerID,
-		Status:   status,
-		Url:      parsedURL,
-		Tags:     row.Tags,
-		Payload:  row.Payload,
-		PayloadB: row.Payloadb,
+		ID:        row.ID,
+		OwnerID:   row.OwnerID,
+		Status:    status,
+		Url:       parsedURL,
+		Tags:      row.Tags,
+		Payload:   row.Payload,
+		PayloadB:  row.Payloadb,
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt,
 	}, nil
 }
 

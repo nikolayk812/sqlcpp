@@ -186,14 +186,56 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 			require.NoError(t, err)
 
 			expected := o
-			expected.ID = orderID
-			expected.Status = domain.OrderStatusPending
-
 			if tt.expectFunc != nil {
 				tt.expectFunc(&expected)
 			}
 
 			assertOrder(t, expected, actualOrder)
+		})
+	}
+}
+
+func (suite *orderRepositorySuite) TestSearchOrders() {
+	order1 := fakeOrder()
+	order2 := fakeOrder()
+
+	tests := []struct {
+		name       string
+		orders     []domain.Order
+		filter     domain.OrderFilter
+		wantOrders []domain.Order
+		wantError  string
+	}{
+		{
+			name:   "search by owner ID",
+			orders: []domain.Order{order1, order2},
+			filter: domain.OrderFilter{
+				OwnerIDs: []string{order1.OwnerID},
+			},
+			wantOrders: []domain.Order{order1},
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			defer suite.deleteAll()
+
+			t := suite.T()
+			ctx := t.Context()
+
+			for _, order := range tt.orders {
+				_, err := suite.repo.InsertOrder(ctx, order)
+				require.NoError(t, err)
+			}
+
+			orders, err := suite.repo.SearchOrders(ctx, tt.filter)
+			if tt.wantError != "" {
+				require.EqualError(t, err, tt.wantError)
+				return
+			}
+			require.NoError(t, err)
+
+			assertOrders(t, tt.wantOrders, orders)
 		})
 	}
 }
@@ -318,7 +360,7 @@ func assertOrder(t *testing.T, expected domain.Order, actual domain.Order) {
 	// Treat empty slices as equal to nil
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(domain.OrderItem{}, "CreatedAt"),
-		cmpopts.IgnoreFields(domain.Order{}, "CreatedAt", "UpdatedAt"),
+		cmpopts.IgnoreFields(domain.Order{}, "CreatedAt", "UpdatedAt", "ID", "Status"),
 		// cmpopts.EquateEmpty(),
 		currencyComparer,
 		cmp.FilterPath(func(p cmp.Path) bool {
@@ -331,4 +373,16 @@ func assertOrder(t *testing.T, expected domain.Order, actual domain.Order) {
 
 	assert.False(t, actual.CreatedAt.IsZero())
 	assert.False(t, actual.UpdatedAt.IsZero())
+	assert.Equal(t, domain.OrderStatusPending, actual.Status)
+	assert.NotEqual(t, uuid.Nil, actual.ID)
+}
+
+func assertOrders(t *testing.T, expected []domain.Order, actual []domain.Order) {
+	t.Helper()
+
+	require.Equal(t, len(expected), len(actual))
+
+	for i := range expected {
+		assertOrder(t, expected[i], actual[i])
+	}
 }

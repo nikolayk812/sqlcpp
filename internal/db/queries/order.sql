@@ -43,18 +43,18 @@ FROM orders o
 WHERE o.id = $1;
 
 -- name: SearchOrders :many
-SELECT DISTINCT o.id,
-                o.owner_id,
-                o.created_at,
-                o.updated_at,
-                o.url,
-                o.status,
-                o.tags,
-                o.payload,
-                o.payloadb,
-                oi.product_id,
-                oi.price_amount,
-                oi.price_currency
+SELECT o.id,
+       o.owner_id,
+       o.created_at,
+       o.updated_at,
+       o.url,
+       o.status,
+       o.tags,
+       o.payload,
+       o.payloadb,
+       oi.product_id,
+       oi.price_amount,
+       oi.price_currency
 FROM orders o
          JOIN order_items oi ON o.id = oi.order_id
 WHERE (
