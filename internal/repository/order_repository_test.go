@@ -18,6 +18,7 @@ import (
 	"go.uber.org/goleak"
 	"golang.org/x/text/currency"
 	"net/url"
+	"sort"
 	"testing"
 )
 
@@ -196,65 +197,99 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 }
 
 func (suite *orderRepositorySuite) TestSearchOrders() {
+	defer suite.deleteAll()
+
 	order1 := fakeOrder()
 	order2 := fakeOrder()
 
+	orderIDs := suite.insertOrders(order1, order2)
+
 	tests := []struct {
 		name       string
-		orders     []domain.Order
 		filter     domain.OrderFilter
 		wantOrders []domain.Order
 		wantError  string
 	}{
 		{
-			name:   "search by owner ids",
-			orders: []domain.Order{order1, order2},
+			name:      "empty filter: error",
+			filter:    domain.OrderFilter{},
+			wantError: "filter.Validate: all fields are empty",
+		},
+		{
+			name: "search by ids: 1 found",
+			filter: domain.OrderFilter{
+				IDs: []uuid.UUID{orderIDs[0]},
+			},
+			wantOrders: []domain.Order{order1},
+		},
+		{
+			name: "search by ids: 2 found",
+			filter: domain.OrderFilter{
+				IDs: []uuid.UUID{orderIDs[0], orderIDs[1]},
+			},
+			wantOrders: []domain.Order{order1, order2},
+		},
+		{
+			name: "search by ids: not found",
+			filter: domain.OrderFilter{
+				IDs: []uuid.UUID{uuid.MustParse(gofakeit.UUID())},
+			},
+		},
+		{
+			name: "search by owner ids: 1 found",
 			filter: domain.OrderFilter{
 				OwnerIDs: []string{order1.OwnerID},
 			},
 			wantOrders: []domain.Order{order1},
 		},
 		{
-			name:   "search by URL patterns: 1 found",
-			orders: []domain.Order{order1, order2},
+			name: "search by owner ids: 2 found",
+			filter: domain.OrderFilter{
+				OwnerIDs: []string{order1.OwnerID, order2.OwnerID},
+			},
+			wantOrders: []domain.Order{order1, order2},
+		},
+		{
+			name: "search by owner ids: not found",
+			filter: domain.OrderFilter{
+				OwnerIDs: []string{"not found"},
+			},
+		},
+		{
+			name: "search by URL patterns: 1 found",
 			filter: domain.OrderFilter{
 				UrlPatterns: []string{order1.Url.String()},
 			},
 			wantOrders: []domain.Order{order1},
 		},
 		{
-			name:   "search by URL patterns: not found",
-			orders: []domain.Order{order1, order2},
+			name: "search by URL patterns: not found",
 			filter: domain.OrderFilter{
 				UrlPatterns: []string{"not found"},
 			},
 		},
 		{
-			name:   "search by status pending: 2 found",
-			orders: []domain.Order{order1, order2},
+			name: "search by status pending: 2 found",
 			filter: domain.OrderFilter{
 				Statuses: []domain.OrderStatus{domain.OrderStatusPending},
 			},
 			wantOrders: []domain.Order{order1, order2},
 		},
 		{
-			name:   "search by status shipped: not found",
-			orders: []domain.Order{order1, order2},
+			name: "search by status shipped: not found",
 			filter: domain.OrderFilter{
 				Statuses: []domain.OrderStatus{domain.OrderStatusShipped},
 			},
 		},
 		{
-			name:   "search by tags: 1 found",
-			orders: []domain.Order{order1, order2},
+			name: "search by tags: 1 found",
 			filter: domain.OrderFilter{
 				Tags: []string{order1.Tags[0]},
 			},
 			wantOrders: []domain.Order{order1},
 		},
 		{
-			name:   "search by tags: not found",
-			orders: []domain.Order{order1, order2},
+			name: "search by tags: not found",
 			filter: domain.OrderFilter{
 				Tags: []string{"not found"},
 			},
@@ -263,17 +298,9 @@ func (suite *orderRepositorySuite) TestSearchOrders() {
 
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			defer suite.deleteAll()
-
 			t := suite.T()
-			ctx := t.Context()
 
-			for _, order := range tt.orders {
-				_, err := suite.repo.InsertOrder(ctx, order)
-				require.NoError(t, err)
-			}
-
-			orders, err := suite.repo.SearchOrders(ctx, tt.filter)
+			orders, err := suite.repo.SearchOrders(t.Context(), tt.filter)
 			if tt.wantError != "" {
 				require.EqualError(t, err, tt.wantError)
 				return
@@ -434,6 +461,18 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 	}
 }
 
+func (suite *orderRepositorySuite) insertOrders(orders ...domain.Order) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(orders))
+
+	for _, order := range orders {
+		id, err := suite.repo.InsertOrder(suite.T().Context(), order)
+		suite.NoError(err)
+		ids = append(ids, id)
+	}
+
+	return ids
+}
+
 func (suite *orderRepositorySuite) deleteAll() {
 	_, err := suite.pool.Exec(suite.T().Context(), "TRUNCATE TABLE orders, order_items CASCADE")
 	suite.NoError(err)
@@ -573,6 +612,15 @@ func assertOrder(t *testing.T, expected domain.Order, actual domain.Order) {
 
 func assertOrders(t *testing.T, expected []domain.Order, actual []domain.Order) {
 	t.Helper()
+
+	sortOrders := func(orders []domain.Order) {
+		sort.Slice(orders, func(i, j int) bool {
+			return orders[i].OwnerID < orders[j].OwnerID
+		})
+	}
+
+	sortOrders(expected)
+	sortOrders(actual)
 
 	require.Equal(t, len(expected), len(actual))
 

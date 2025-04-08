@@ -21,7 +21,9 @@ type OrderFilter struct {
 }
 
 func (f OrderFilter) Validate() error {
-	// TODO: all fields are empty
+	if len(f.IDs) == 0 && len(f.OwnerIDs) == 0 && len(f.UrlPatterns) == 0 && len(f.Statuses) == 0 && len(f.Tags) == 0 && f.CreatedAt == nil && f.UpdatedAt == nil {
+		return errors.New("all fields are empty")
+	}
 
 	if f.CreatedAt != nil {
 		if err := f.CreatedAt.Validate(); err != nil {
