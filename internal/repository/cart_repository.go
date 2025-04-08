@@ -66,12 +66,10 @@ func (r *cartRepository) AddItem(ctx context.Context, ownerID string, item domai
 }
 
 func (r *cartRepository) DeleteItem(ctx context.Context, ownerID string, productID uuid.UUID) (bool, error) {
-	arg := db.DeleteItemParams{
+	rowsAffected, err := r.q.DeleteItem(ctx, db.DeleteItemParams{
 		OwnerID:   ownerID,
 		ProductID: productID,
-	}
-
-	rowsAffected, err := r.q.DeleteItem(ctx, arg)
+	})
 	if err != nil {
 		return false, fmt.Errorf("q.DeleteItem: %w", err)
 	}

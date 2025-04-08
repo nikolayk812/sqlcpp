@@ -265,7 +265,7 @@ WHERE (
               AND
           ($5::TEXT[] IS NULL OR EXISTS (SELECT 1
                                             FROM unnest($5) AS tag
-                                            WHERE tag = ANY ($5)))
+                                            WHERE tag = ANY (o.tags)))
               AND
           (
               ($6::TIMESTAMP IS NULL OR o.created_at >= $6) AND

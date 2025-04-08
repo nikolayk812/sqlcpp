@@ -104,7 +104,7 @@ WHERE (
               AND
           (@tags::TEXT[] IS NULL OR EXISTS (SELECT 1
                                             FROM unnest(@tags) AS tag
-                                            WHERE tag = ANY (@tags)))
+                                            WHERE tag = ANY (o.tags)))
               AND
           (
               (sqlc.narg(created_after)::TIMESTAMP IS NULL OR o.created_at >= sqlc.narg(created_after)) AND

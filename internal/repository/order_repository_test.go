@@ -215,12 +215,49 @@ func (suite *orderRepositorySuite) TestSearchOrders() {
 			wantOrders: []domain.Order{order1},
 		},
 		{
-			name:   "search by owner empty",
+			name:   "search by URL patterns: 1 found",
 			orders: []domain.Order{order1, order2},
 			filter: domain.OrderFilter{
-				OwnerIDs: []string{order1.OwnerID},
+				UrlPatterns: []string{order1.Url.String()},
 			},
 			wantOrders: []domain.Order{order1},
+		},
+		{
+			name:   "search by URL patterns: not found",
+			orders: []domain.Order{order1, order2},
+			filter: domain.OrderFilter{
+				UrlPatterns: []string{"not found"},
+			},
+		},
+		{
+			name:   "search by status pending: 2 found",
+			orders: []domain.Order{order1, order2},
+			filter: domain.OrderFilter{
+				Statuses: []domain.OrderStatus{domain.OrderStatusPending},
+			},
+			wantOrders: []domain.Order{order1, order2},
+		},
+		{
+			name:   "search by status shipped: not found",
+			orders: []domain.Order{order1, order2},
+			filter: domain.OrderFilter{
+				Statuses: []domain.OrderStatus{domain.OrderStatusShipped},
+			},
+		},
+		{
+			name:   "search by tags: 1 found",
+			orders: []domain.Order{order1, order2},
+			filter: domain.OrderFilter{
+				Tags: []string{order1.Tags[0]},
+			},
+			wantOrders: []domain.Order{order1},
+		},
+		{
+			name:   "search by tags: not found",
+			orders: []domain.Order{order1, order2},
+			filter: domain.OrderFilter{
+				Tags: []string{"not found"},
+			},
 		},
 	}
 
@@ -409,7 +446,7 @@ func fakeOrder() domain.Order {
 	}
 
 	var tags []string
-	for i := 0; i < gofakeit.Number(1, 5); i++ {
+	for i := 0; i < gofakeit.Number(1, 3); i++ {
 		tags = append(tags, gofakeit.BeerName())
 	}
 
