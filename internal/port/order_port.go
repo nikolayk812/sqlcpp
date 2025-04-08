@@ -14,6 +14,8 @@ type OrderRepository interface {
 
 	InsertOrder(ctx context.Context, order domain.Order) (uuid.UUID, error)
 
-	DeleteOrder(ctx context.Context, orderID uuid.UUID) error
 	SoftDeleteOrder(ctx context.Context, orderID uuid.UUID) error
+	SoftDeleteOrderItem(ctx context.Context, orderID, productID uuid.UUID) error
+
+	DeleteOrder(ctx context.Context, orderID uuid.UUID) error
 }

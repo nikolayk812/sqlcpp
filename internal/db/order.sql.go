@@ -349,6 +349,17 @@ func (q *Queries) SearchOrders(ctx context.Context, arg SearchOrdersParams) ([]S
 	return items, nil
 }
 
+const setOrderUpdated = `-- name: SetOrderUpdated :execresult
+UPDATE orders
+SET updated_at = NOW()
+WHERE id = $1
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) SetOrderUpdated(ctx context.Context, id uuid.UUID) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, setOrderUpdated, id)
+}
+
 const softDeleteOrder = `-- name: SoftDeleteOrder :execresult
 UPDATE orders
 SET deleted_at = NOW()
@@ -358,4 +369,21 @@ WHERE id = $1
 
 func (q *Queries) SoftDeleteOrder(ctx context.Context, id uuid.UUID) (pgconn.CommandTag, error) {
 	return q.db.Exec(ctx, softDeleteOrder, id)
+}
+
+const softDeleteOrderItem = `-- name: SoftDeleteOrderItem :execresult
+UPDATE order_items
+SET deleted_at = NOW()
+WHERE order_id = $1
+  AND product_id = $2
+  AND deleted_at IS NULL
+`
+
+type SoftDeleteOrderItemParams struct {
+	OrderID   uuid.UUID
+	ProductID uuid.UUID
+}
+
+func (q *Queries) SoftDeleteOrderItem(ctx context.Context, arg SoftDeleteOrderItemParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, softDeleteOrderItem, arg.OrderID, arg.ProductID)
 }

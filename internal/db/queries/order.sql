@@ -44,6 +44,19 @@ SET deleted_at = NOW()
 WHERE id = $1
   AND deleted_at IS NULL;
 
+-- name: SoftDeleteOrderItem :execresult
+UPDATE order_items
+SET deleted_at = NOW()
+WHERE order_id = $1
+  AND product_id = $2
+  AND deleted_at IS NULL;
+
+-- name: SetOrderUpdated :execresult
+UPDATE orders
+SET updated_at = NOW()
+WHERE id = $1
+  AND deleted_at IS NULL;
+
 -- name: GetOrderJoinItems :many
 SELECT o.id,
        o.owner_id,

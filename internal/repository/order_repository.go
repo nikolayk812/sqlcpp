@@ -259,6 +259,44 @@ func (r *orderRepository) SoftDeleteOrder(ctx context.Context, orderID uuid.UUID
 	return nil
 }
 
+func (r *orderRepository) SoftDeleteOrderItem(ctx context.Context, orderID, productID uuid.UUID) error {
+	if orderID == uuid.Nil {
+		return fmt.Errorf("orderID is empty")
+	}
+	if productID == uuid.Nil {
+		return fmt.Errorf("productID is empty")
+	}
+
+	if err := r.withTx(ctx, func(q *db.Queries) error {
+		cmdTag, err := r.q.SoftDeleteOrderItem(ctx, db.SoftDeleteOrderItemParams{
+			OrderID:   orderID,
+			ProductID: productID,
+		})
+		if err != nil {
+			return fmt.Errorf("q.SoftDeleteOrderItem: %w", err)
+		}
+
+		if cmdTag.RowsAffected() == 0 {
+			return fmt.Errorf("q.SoftDeleteOrderItem: %w", ErrNotFound)
+		}
+
+		cmdTag, err = r.q.SetOrderUpdated(ctx, orderID)
+		if err != nil {
+			return fmt.Errorf("q.SetOrderUpdated: %w", err)
+		}
+
+		if cmdTag.RowsAffected() == 0 {
+			return fmt.Errorf("q.SetOrderUpdated: %w", ErrNotFound)
+		}
+
+		return nil
+	}); err != nil {
+		return fmt.Errorf("r.withTx: %w", err)
+	}
+
+	return nil
+}
+
 func (r *orderRepository) withTx(ctx context.Context, fn func(q *db.Queries) error) error {
 	_, err := withTx(ctx, r.pool, r.q, func(q *db.Queries) (struct{}, error) {
 		err := fn(q)
