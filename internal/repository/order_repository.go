@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("not found")
+	ErrNotFound = errors.New("order not found")
 )
 
 type orderRepository struct {
@@ -237,6 +237,23 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, orderID uuid.UUID) er
 		return nil
 	}); err != nil {
 		return fmt.Errorf("r.withTx: %w", err)
+	}
+
+	return nil
+}
+
+func (r *orderRepository) SoftDeleteOrder(ctx context.Context, orderID uuid.UUID) error {
+	if orderID == uuid.Nil {
+		return fmt.Errorf("orderID is empty")
+	}
+
+	cmdTag, err := r.q.SoftDeleteOrder(ctx, orderID)
+	if err != nil {
+		return fmt.Errorf("q.SoftDeleteOrder: %w", err)
+	}
+
+	if cmdTag.RowsAffected() == 0 {
+		return fmt.Errorf("q.SoftDeleteOrder: %w", ErrNotFound)
 	}
 
 	return nil

@@ -25,7 +25,8 @@ func (q *Queries) DeleteOrder(ctx context.Context, id uuid.UUID) (pgconn.Command
 }
 
 const deleteOrderItems = `-- name: DeleteOrderItems :execresult
-DELETE FROM order_items
+DELETE
+FROM order_items
 WHERE order_id = $1
 `
 
@@ -42,9 +43,11 @@ SELECT id,
        status,
        tags,
        payload,
-       payloadb
+       payloadb,
+       deleted_at
 FROM orders
 WHERE id = $1
+  AND deleted_at IS NULL
 `
 
 type GetOrderRow struct {
@@ -57,6 +60,7 @@ type GetOrderRow struct {
 	Tags      []string
 	Payload   []byte
 	Payloadb  []byte
+	DeletedAt *time.Time
 }
 
 func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (GetOrderRow, error) {
@@ -72,6 +76,7 @@ func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (GetOrderRow, erro
 		&i.Tags,
 		&i.Payload,
 		&i.Payloadb,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -80,6 +85,7 @@ const getOrderItems = `-- name: GetOrderItems :many
 SELECT product_id, price_amount, price_currency, created_at
 FROM order_items
 WHERE order_id = $1
+  AND deleted_at IS NULL
 `
 
 type GetOrderItemsRow struct {
@@ -130,6 +136,8 @@ SELECT o.id,
 FROM orders o
          JOIN order_items oi ON o.id = oi.order_id
 WHERE o.id = $1
+  ANd o.deleted_at IS NULL
+  AND oi.deleted_at IS NULL
 `
 
 type GetOrderJoinItemsRow struct {
@@ -339,4 +347,15 @@ func (q *Queries) SearchOrders(ctx context.Context, arg SearchOrdersParams) ([]S
 		return nil, err
 	}
 	return items, nil
+}
+
+const softDeleteOrder = `-- name: SoftDeleteOrder :execresult
+UPDATE orders
+SET deleted_at = NOW()
+WHERE id = $1
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) SoftDeleteOrder(ctx context.Context, id uuid.UUID) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, softDeleteOrder, id)
 }

@@ -254,6 +254,7 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 	tests := []struct {
 		name        string
 		order       domain.Order
+		setup       func(uuid uuid.UUID) error
 		orderIDFunc func(uuid.UUID) uuid.UUID
 		wantError   string
 	}{
@@ -267,7 +268,7 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 			orderIDFunc: func(_ uuid.UUID) uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
 			},
-			wantError: "r.withTx: q.DeleteOrderItems: not found",
+			wantError: "r.withTx: q.DeleteOrderItems: order not found",
 		},
 		{
 			name:  "delete with empty order ID: error",
@@ -276,6 +277,13 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 				return uuid.Nil
 			},
 			wantError: "orderID is empty",
+		},
+		{
+			name:  "delete soft-deleted order: ok",
+			order: order1,
+			setup: func(orderID uuid.UUID) error {
+				return suite.repo.SoftDeleteOrder(suite.T().Context(), orderID)
+			},
 		},
 	}
 
@@ -289,6 +297,11 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 
 			orderID, err := suite.repo.InsertOrder(t.Context(), o)
 			require.NoError(t, err)
+
+			if tt.setup != nil {
+				err := tt.setup(orderID)
+				require.NoError(t, err)
+			}
 
 			toDeleteOrderID := orderID
 			if tt.orderIDFunc != nil {
@@ -304,7 +317,82 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 
 			// Verify the order is deleted
 			_, err = suite.repo.GetOrder(ctx, orderID)
-			assert.EqualError(t, err, "r.withTxOrder: q.GetOrder: not found")
+			assert.EqualError(t, err, "r.withTxOrder: q.GetOrder: order not found")
+		})
+	}
+}
+
+func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
+	order1 := fakeOrder()
+
+	tests := []struct {
+		name        string
+		order       domain.Order
+		orderIDFunc func(uuid.UUID) uuid.UUID
+		setup       func(uuid.UUID) error
+		wantError   string
+	}{
+		{
+			name:  "soft-delete existing order: ok",
+			order: order1,
+		},
+		{
+			name:  "soft-delete non-existing order: not found",
+			order: order1,
+			orderIDFunc: func(_ uuid.UUID) uuid.UUID {
+				return uuid.MustParse(gofakeit.UUID())
+			},
+			wantError: "q.SoftDeleteOrder: order not found",
+		},
+		{
+			name:  "soft-delete with empty order ID: error",
+			order: order1,
+			orderIDFunc: func(_ uuid.UUID) uuid.UUID {
+				return uuid.Nil
+			},
+			wantError: "orderID is empty",
+		},
+		{
+			name:  "soft-delete deleted order: not found",
+			order: order1,
+			setup: func(orderID uuid.UUID) error {
+				return suite.repo.DeleteOrder(suite.T().Context(), orderID)
+			},
+			wantError: "q.SoftDeleteOrder: order not found",
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			defer suite.deleteAll()
+
+			t := suite.T()
+			ctx := t.Context()
+
+			// Insert the order if needed
+			orderID, err := suite.repo.InsertOrder(ctx, tt.order)
+			require.NoError(t, err)
+
+			toDeleteOrderID := orderID
+			if tt.orderIDFunc != nil {
+				toDeleteOrderID = tt.orderIDFunc(orderID)
+			}
+
+			if tt.setup != nil {
+				err := tt.setup(orderID)
+				require.NoError(t, err)
+			}
+
+			err = suite.repo.SoftDeleteOrder(ctx, toDeleteOrderID)
+			if tt.wantError != "" {
+				require.EqualError(t, err, tt.wantError)
+				return
+			}
+			require.NoError(t, err)
+
+			// Verify the order is soft-deleted
+			_, err = suite.repo.GetOrder(ctx, orderID)
+			assert.EqualError(t, err, "r.withTxOrder: q.GetOrder: order not found")
 		})
 	}
 }

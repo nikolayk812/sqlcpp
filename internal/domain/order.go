@@ -18,6 +18,7 @@ type Order struct {
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	DeletedAt *time.Time
 }
 
 type OrderItem struct {
@@ -25,4 +26,5 @@ type OrderItem struct {
 	Price     Money
 
 	CreatedAt time.Time
+	DeletedAt *time.Time
 }

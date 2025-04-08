@@ -17,6 +17,7 @@ type OrderFilter struct {
 	Tags        []string
 	CreatedAt   *TimeRange
 	UpdatedAt   *TimeRange
+	// TODO: add DeletedAt
 }
 
 func (f OrderFilter) Validate() error {

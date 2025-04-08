@@ -7,9 +7,11 @@ SELECT id,
        status,
        tags,
        payload,
-       payloadb
+       payloadb,
+       deleted_at
 FROM orders
-WHERE id = $1;
+WHERE id = $1
+  AND deleted_at IS NULL;
 
 -- name: InsertOrder :one
 INSERT INTO orders (owner_id, url, tags, payload, payloadb)
@@ -19,7 +21,8 @@ RETURNING id;
 -- name: GetOrderItems :many
 SELECT product_id, price_amount, price_currency, created_at
 FROM order_items
-WHERE order_id = $1;
+WHERE order_id = $1
+  AND deleted_at IS NULL;
 
 -- name: InsertOrderItem :exec
 INSERT INTO order_items (order_id, product_id, price_amount, price_currency)
@@ -31,8 +34,15 @@ FROM orders
 WHERE id = $1;
 
 -- name: DeleteOrderItems :execresult
-DELETE FROM order_items
+DELETE
+FROM order_items
 WHERE order_id = $1;
+
+-- name: SoftDeleteOrder :execresult
+UPDATE orders
+SET deleted_at = NOW()
+WHERE id = $1
+  AND deleted_at IS NULL;
 
 -- name: GetOrderJoinItems :many
 SELECT o.id,
@@ -49,7 +59,9 @@ SELECT o.id,
        oi.price_currency
 FROM orders o
          JOIN order_items oi ON o.id = oi.order_id
-WHERE o.id = $1;
+WHERE o.id = $1
+  ANd o.deleted_at IS NULL
+  AND oi.deleted_at IS NULL;
 
 -- name: SearchOrders :many
 SELECT o.id,
