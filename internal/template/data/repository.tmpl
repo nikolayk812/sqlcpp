@@ -1,6 +1,7 @@
-Your task is to generate Go code for {{ .DomainModelName }}Repository according to the example provided in OrderRepository,
-which is the reference implementation. I am using sqlc-dev/sqlc generator,
-which generates queries and records. Repository layer has to do adaptation between sqlc generated code and domain models.
+Your task is to generate Go code for {{ .DomainModelName }}Repository which implements port interface according to the example provided in OrderRepository,
+which is the reference implementation.
+
+I am using sqlc-dev/sqlc generator, which generates queries and records. Repository layer has to do adaptation between sqlc generated code and domain models.
 The adaptation involves mapping sqlc generated records to domain models and vice versa, transactional orchestration.
 
 Do not use withTx methods, if there is a single call to sqlc query from a repository method, call it directly.
@@ -11,26 +12,6 @@ Create 2 New constructor methods one for *pgxpool.Pool and one for pgx.Tx
 
 No need to explain anything, provide only generated Go code according to provided interface in the end.
 
-### Generated models/records by sqlc ###
+{{ .ReferenceCode }}
 
-{{ .SQLCModelsCode }}
-
-### My domain models hand-written for Order ###
-
-{{ .OrderDomainModelCode }}
-
-### My repository hand-written for Order ###
-
-{{ .OrderRepositoryCode }}
-
-### My domain model hand-written for {{ .DomainModelName }} ###
-
-{{ .DomainModelCode }}
-
-### Generated queries by sqlc for {{ .DomainModelName }} ###
-
-{{ .DomainModelSQLCQueriesCode }}
-
-### Here comes the interface you have to implement ###
-
-{{ .DomainModelPortCode }}
+{{ .ToGenerateCode }}

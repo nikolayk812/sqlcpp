@@ -51,15 +51,14 @@ func (r *cartRepository) GetCart(ctx context.Context, ownerID string) (domain.Ca
 }
 
 func (r *cartRepository) AddItem(ctx context.Context, ownerID string, item domain.CartItem) error {
-	parsedCurrency := item.Price.Currency.String()
-
-	err := r.q.AddItem(ctx, db.AddItemParams{
+	arg := db.AddItemParams{
 		OwnerID:       ownerID,
 		ProductID:     item.ProductID,
 		PriceAmount:   item.Price.Amount,
-		PriceCurrency: parsedCurrency,
-	})
-	if err != nil {
+		PriceCurrency: item.Price.Currency.String(),
+	}
+
+	if err := r.q.AddItem(ctx, arg); err != nil {
 		return fmt.Errorf("q.AddItem: %w", err)
 	}
 
@@ -67,10 +66,12 @@ func (r *cartRepository) AddItem(ctx context.Context, ownerID string, item domai
 }
 
 func (r *cartRepository) DeleteItem(ctx context.Context, ownerID string, productID uuid.UUID) (bool, error) {
-	rowsAffected, err := r.q.DeleteItem(ctx, db.DeleteItemParams{
+	arg := db.DeleteItemParams{
 		OwnerID:   ownerID,
 		ProductID: productID,
-	})
+	}
+
+	rowsAffected, err := r.q.DeleteItem(ctx, arg)
 	if err != nil {
 		return false, fmt.Errorf("q.DeleteItem: %w", err)
 	}
