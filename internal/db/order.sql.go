@@ -10,8 +10,28 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shopspring/decimal"
 )
+
+const deleteOrder = `-- name: DeleteOrder :execresult
+DELETE
+FROM orders
+WHERE id = $1
+`
+
+func (q *Queries) DeleteOrder(ctx context.Context, id uuid.UUID) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, deleteOrder, id)
+}
+
+const deleteOrderItems = `-- name: DeleteOrderItems :execresult
+DELETE FROM order_items
+WHERE order_id = $1
+`
+
+func (q *Queries) DeleteOrderItems(ctx context.Context, orderID uuid.UUID) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, deleteOrderItems, orderID)
+}
 
 const getOrder = `-- name: GetOrder :one
 SELECT id,

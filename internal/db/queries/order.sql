@@ -25,6 +25,15 @@ WHERE order_id = $1;
 INSERT INTO order_items (order_id, product_id, price_amount, price_currency)
 VALUES ($1, $2, $3, $4);
 
+-- name: DeleteOrder :execresult
+DELETE
+FROM orders
+WHERE id = $1;
+
+-- name: DeleteOrderItems :execresult
+DELETE FROM order_items
+WHERE order_id = $1;
+
 -- name: GetOrderJoinItems :many
 SELECT o.id,
        o.owner_id,

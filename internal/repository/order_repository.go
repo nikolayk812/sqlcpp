@@ -16,6 +16,10 @@ import (
 	"time"
 )
 
+var (
+	ErrNotFound = errors.New("not found")
+)
+
 type orderRepository struct {
 	q    *db.Queries
 	pool *pgxpool.Pool
@@ -41,6 +45,9 @@ func (r *orderRepository) GetOrder(ctx context.Context, orderID uuid.UUID) (doma
 	order, err := r.withTxOrder(ctx, func(q *db.Queries) (domain.Order, error) {
 		dbOrder, err := q.GetOrder(ctx, orderID)
 		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return o, fmt.Errorf("q.GetOrder: %w", ErrNotFound)
+			}
 			return o, fmt.Errorf("q.GetOrder: %w", err)
 		}
 
@@ -72,7 +79,7 @@ func (r *orderRepository) GetOrderJoin(ctx context.Context, orderID uuid.UUID) (
 	}
 
 	if len(dbOrderItemsRows) == 0 {
-		return o, fmt.Errorf("order not found")
+		return o, ErrNotFound
 	}
 
 	// Map the first row to domain.Order
@@ -201,6 +208,38 @@ func (r *orderRepository) SearchOrders(ctx context.Context, filter domain.OrderF
 	}
 
 	return lo.Values(orderMap), nil
+}
+
+func (r *orderRepository) DeleteOrder(ctx context.Context, orderID uuid.UUID) error {
+	if orderID == uuid.Nil {
+		return fmt.Errorf("orderID is empty")
+	}
+
+	if err := r.withTx(ctx, func(q *db.Queries) error {
+		cmdTag, err := q.DeleteOrderItems(ctx, orderID)
+		if err != nil {
+			return fmt.Errorf("q.DeleteOrderItems: %w", err)
+		}
+
+		if cmdTag.RowsAffected() == 0 {
+			return fmt.Errorf("q.DeleteOrderItems: %w", ErrNotFound)
+		}
+
+		cmdTag, err = q.DeleteOrder(ctx, orderID)
+		if err != nil {
+			return fmt.Errorf("q.DeleteOrder: %w", err)
+		}
+
+		if cmdTag.RowsAffected() == 0 {
+			return fmt.Errorf("q.DeleteOrder: %w", ErrNotFound)
+		}
+
+		return nil
+	}); err != nil {
+		return fmt.Errorf("r.withTx: %w", err)
+	}
+
+	return nil
 }
 
 func (r *orderRepository) withTx(ctx context.Context, fn func(q *db.Queries) error) error {

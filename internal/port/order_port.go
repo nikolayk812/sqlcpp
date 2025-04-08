@@ -13,4 +13,6 @@ type OrderRepository interface {
 	SearchOrders(ctx context.Context, filter domain.OrderFilter) ([]domain.Order, error)
 
 	InsertOrder(ctx context.Context, order domain.Order) (uuid.UUID, error)
+
+	DeleteOrder(ctx context.Context, orderID uuid.UUID) error
 }

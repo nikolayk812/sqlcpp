@@ -207,7 +207,15 @@ func (suite *orderRepositorySuite) TestSearchOrders() {
 		wantError  string
 	}{
 		{
-			name:   "search by owner ID",
+			name:   "search by owner ids",
+			orders: []domain.Order{order1, order2},
+			filter: domain.OrderFilter{
+				OwnerIDs: []string{order1.OwnerID},
+			},
+			wantOrders: []domain.Order{order1},
+		},
+		{
+			name:   "search by owner empty",
 			orders: []domain.Order{order1, order2},
 			filter: domain.OrderFilter{
 				OwnerIDs: []string{order1.OwnerID},
@@ -236,6 +244,67 @@ func (suite *orderRepositorySuite) TestSearchOrders() {
 			require.NoError(t, err)
 
 			assertOrders(t, tt.wantOrders, orders)
+		})
+	}
+}
+
+func (suite *orderRepositorySuite) TestDeleteOrder() {
+	order1 := fakeOrder()
+
+	tests := []struct {
+		name        string
+		order       domain.Order
+		orderIDFunc func(uuid.UUID) uuid.UUID
+		wantError   string
+	}{
+		{
+			name:  "delete existing order: ok",
+			order: order1,
+		},
+		{
+			name:  "delete non-existing order: not found",
+			order: order1,
+			orderIDFunc: func(_ uuid.UUID) uuid.UUID {
+				return uuid.MustParse(gofakeit.UUID())
+			},
+			wantError: "r.withTx: q.DeleteOrderItems: not found",
+		},
+		{
+			name:  "delete with empty order ID: error",
+			order: order1,
+			orderIDFunc: func(_ uuid.UUID) uuid.UUID {
+				return uuid.Nil
+			},
+			wantError: "orderID is empty",
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			defer suite.deleteAll()
+
+			t := suite.T()
+			ctx := t.Context()
+			o := tt.order
+
+			orderID, err := suite.repo.InsertOrder(t.Context(), o)
+			require.NoError(t, err)
+
+			toDeleteOrderID := orderID
+			if tt.orderIDFunc != nil {
+				toDeleteOrderID = tt.orderIDFunc(orderID)
+			}
+
+			err = suite.repo.DeleteOrder(ctx, toDeleteOrderID)
+			if tt.wantError != "" {
+				require.EqualError(t, err, tt.wantError)
+				return
+			}
+			require.NoError(t, err)
+
+			// Verify the order is deleted
+			_, err = suite.repo.GetOrder(ctx, orderID)
+			assert.EqualError(t, err, "r.withTxOrder: q.GetOrder: not found")
 		})
 	}
 }
