@@ -14,27 +14,27 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-const deleteOrder = `-- name: DeleteOrder :execresult
+const DeleteOrder = `-- name: DeleteOrder :execresult
 DELETE
 FROM orders
 WHERE id = $1
 `
 
 func (q *Queries) DeleteOrder(ctx context.Context, id uuid.UUID) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, deleteOrder, id)
+	return q.db.Exec(ctx, DeleteOrder, id)
 }
 
-const deleteOrderItems = `-- name: DeleteOrderItems :execresult
+const DeleteOrderItems = `-- name: DeleteOrderItems :execresult
 DELETE
 FROM order_items
 WHERE order_id = $1
 `
 
 func (q *Queries) DeleteOrderItems(ctx context.Context, orderID uuid.UUID) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, deleteOrderItems, orderID)
+	return q.db.Exec(ctx, DeleteOrderItems, orderID)
 }
 
-const getOrder = `-- name: GetOrder :one
+const GetOrder = `-- name: GetOrder :one
 SELECT id,
        owner_id,
        created_at,
@@ -68,7 +68,7 @@ type GetOrderRow struct {
 }
 
 func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (GetOrderRow, error) {
-	row := q.db.QueryRow(ctx, getOrder, id)
+	row := q.db.QueryRow(ctx, GetOrder, id)
 	var i GetOrderRow
 	err := row.Scan(
 		&i.ID,
@@ -87,7 +87,7 @@ func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (GetOrderRow, erro
 	return i, err
 }
 
-const getOrderItems = `-- name: GetOrderItems :many
+const GetOrderItems = `-- name: GetOrderItems :many
 SELECT product_id, price_amount, price_currency, created_at
 FROM order_items
 WHERE order_id = $1
@@ -102,7 +102,7 @@ type GetOrderItemsRow struct {
 }
 
 func (q *Queries) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]GetOrderItemsRow, error) {
-	rows, err := q.db.Query(ctx, getOrderItems, orderID)
+	rows, err := q.db.Query(ctx, GetOrderItems, orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (q *Queries) GetOrderItems(ctx context.Context, orderID uuid.UUID) ([]GetOr
 	return items, nil
 }
 
-const getOrderJoinItems = `-- name: GetOrderJoinItems :many
+const GetOrderJoinItems = `-- name: GetOrderJoinItems :many
 SELECT o.id,
        o.owner_id,
        o.created_at,
@@ -166,7 +166,7 @@ type GetOrderJoinItemsRow struct {
 }
 
 func (q *Queries) GetOrderJoinItems(ctx context.Context, id uuid.UUID) ([]GetOrderJoinItemsRow, error) {
-	rows, err := q.db.Query(ctx, getOrderJoinItems, id)
+	rows, err := q.db.Query(ctx, GetOrderJoinItems, id)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func (q *Queries) GetOrderJoinItems(ctx context.Context, id uuid.UUID) ([]GetOrd
 	return items, nil
 }
 
-const insertOrder = `-- name: InsertOrder :one
+const InsertOrder = `-- name: InsertOrder :one
 INSERT INTO orders (owner_id, url, tags, payload, payloadb, price_amount, price_currency)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id
@@ -217,7 +217,7 @@ type InsertOrderParams struct {
 }
 
 func (q *Queries) InsertOrder(ctx context.Context, arg InsertOrderParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, insertOrder,
+	row := q.db.QueryRow(ctx, InsertOrder,
 		arg.OwnerID,
 		arg.Url,
 		arg.Tags,
@@ -231,7 +231,7 @@ func (q *Queries) InsertOrder(ctx context.Context, arg InsertOrderParams) (uuid.
 	return id, err
 }
 
-const insertOrderItem = `-- name: InsertOrderItem :exec
+const InsertOrderItem = `-- name: InsertOrderItem :exec
 INSERT INTO order_items (order_id, product_id, price_amount, price_currency)
 VALUES ($1, $2, $3, $4)
 `
@@ -244,7 +244,7 @@ type InsertOrderItemParams struct {
 }
 
 func (q *Queries) InsertOrderItem(ctx context.Context, arg InsertOrderItemParams) error {
-	_, err := q.db.Exec(ctx, insertOrderItem,
+	_, err := q.db.Exec(ctx, InsertOrderItem,
 		arg.OrderID,
 		arg.ProductID,
 		arg.PriceAmount,
@@ -253,7 +253,7 @@ func (q *Queries) InsertOrderItem(ctx context.Context, arg InsertOrderItemParams
 	return err
 }
 
-const searchOrders = `-- name: SearchOrders :many
+const SearchOrders = `-- name: SearchOrders :many
 SELECT o.id,
        o.owner_id,
        o.created_at,
@@ -327,7 +327,7 @@ type SearchOrdersRow struct {
 }
 
 func (q *Queries) SearchOrders(ctx context.Context, arg SearchOrdersParams) ([]SearchOrdersRow, error) {
-	rows, err := q.db.Query(ctx, searchOrders,
+	rows, err := q.db.Query(ctx, SearchOrders,
 		arg.Ids,
 		arg.OwnerIds,
 		arg.UrlPatterns,
@@ -371,7 +371,7 @@ func (q *Queries) SearchOrders(ctx context.Context, arg SearchOrdersParams) ([]S
 	return items, nil
 }
 
-const setOrderUpdated = `-- name: SetOrderUpdated :execresult
+const SetOrderUpdated = `-- name: SetOrderUpdated :execresult
 UPDATE orders
 SET updated_at = NOW()
 WHERE id = $1
@@ -379,10 +379,10 @@ WHERE id = $1
 `
 
 func (q *Queries) SetOrderUpdated(ctx context.Context, id uuid.UUID) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, setOrderUpdated, id)
+	return q.db.Exec(ctx, SetOrderUpdated, id)
 }
 
-const softDeleteOrder = `-- name: SoftDeleteOrder :execresult
+const SoftDeleteOrder = `-- name: SoftDeleteOrder :execresult
 UPDATE orders
 SET deleted_at = NOW()
 WHERE id = $1
@@ -390,10 +390,10 @@ WHERE id = $1
 `
 
 func (q *Queries) SoftDeleteOrder(ctx context.Context, id uuid.UUID) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, softDeleteOrder, id)
+	return q.db.Exec(ctx, SoftDeleteOrder, id)
 }
 
-const softDeleteOrderItem = `-- name: SoftDeleteOrderItem :execresult
+const SoftDeleteOrderItem = `-- name: SoftDeleteOrderItem :execresult
 UPDATE order_items
 SET deleted_at = NOW()
 WHERE order_id = $1
@@ -407,5 +407,5 @@ type SoftDeleteOrderItemParams struct {
 }
 
 func (q *Queries) SoftDeleteOrderItem(ctx context.Context, arg SoftDeleteOrderItemParams) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, softDeleteOrderItem, arg.OrderID, arg.ProductID)
+	return q.db.Exec(ctx, SoftDeleteOrderItem, arg.OrderID, arg.ProductID)
 }

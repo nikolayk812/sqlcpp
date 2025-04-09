@@ -107,7 +107,7 @@ func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (
 
 	var orderID uuid.UUID
 
-	orderID, err := r.withTxUUID(ctx, func(q *db.Queries) (uuid.UUID, error) {
+	orderID, err := r.withTxUUID(ctx, func(q *db.Queries) (_ uuid.UUID, txErr error) {
 		// Insert the order and get the generated order ID
 		orderID, err := q.InsertOrder(ctx, db.InsertOrderParams{
 			OwnerID:       order.OwnerID,
@@ -122,17 +122,33 @@ func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (
 			return uuid.Nil, fmt.Errorf("q.InsertOrder: %w", err)
 		}
 
-		// TODO: join or batch
-		// Insert each order item
+		// Insert order items using pgx Batch
+		batch := &pgx.Batch{}
+
 		for _, item := range order.Items {
-			arg := db.InsertOrderItemParams{
-				OrderID:       orderID,
-				ProductID:     item.ProductID,
-				PriceAmount:   item.Price.Amount,
-				PriceCurrency: item.Price.Currency.String(),
+			batch.Queue(db.InsertOrderItem,
+				orderID,
+				item.ProductID,
+				item.Price.Amount,
+				item.Price.Currency.String(),
+			)
+		}
+
+		tx, ok := q.DB().(pgx.Tx)
+		if !ok {
+			return uuid.Nil, fmt.Errorf("q.DB() is not pgx.Tx")
+		}
+
+		results := tx.SendBatch(ctx, batch)
+		defer func() {
+			if err := results.Close(); err != nil {
+				txErr = errors.Join(txErr, fmt.Errorf("results.Close: %w", err))
 			}
-			if err := q.InsertOrderItem(ctx, arg); err != nil {
-				return uuid.Nil, fmt.Errorf("q.InsertOrderItem: %w", err)
+		}()
+
+		for i := 0; i < batch.Len(); i++ {
+			if _, err := results.Exec(); err != nil {
+				return uuid.Nil, fmt.Errorf("batch item[%d]: %w", i, err)
 			}
 		}
 

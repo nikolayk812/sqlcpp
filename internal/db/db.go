@@ -30,3 +30,7 @@ func (q *Queries) WithTx(tx pgx.Tx) *Queries {
 		db: tx,
 	}
 }
+
+func (q *Queries) DB() DBTX {
+	return q.db
+}
