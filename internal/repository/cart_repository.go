@@ -51,15 +51,17 @@ func (r *cartRepository) GetCart(ctx context.Context, ownerID string) (domain.Ca
 }
 
 func (r *cartRepository) AddItem(ctx context.Context, ownerID string, item domain.CartItem) error {
-	err := r.q.AddItem(ctx, db.AddItemParams{
+	arg := db.AddItemParams{
 		OwnerID:       ownerID,
 		ProductID:     item.ProductID,
 		PriceAmount:   item.Price.Amount,
 		PriceCurrency: item.Price.Currency.String(),
-	})
-	if err != nil {
+	}
+
+	if err := r.q.AddItem(ctx, arg); err != nil {
 		return fmt.Errorf("q.AddItem: %w", err)
 	}
+
 	return nil
 }
 
@@ -71,29 +73,23 @@ func (r *cartRepository) DeleteItem(ctx context.Context, ownerID string, product
 	if err != nil {
 		return false, fmt.Errorf("q.DeleteItem: %w", err)
 	}
+
 	return rowsAffected > 0, nil
-}
-
-func mapGetCartRowToDomain(row db.GetCartRow) (domain.CartItem, error) {
-	parsedCurrency, err := currency.ParseISO(row.PriceCurrency)
-	if err != nil {
-		return domain.CartItem{}, fmt.Errorf("currency[%s] is not valid: %w", row.PriceCurrency, err)
-	}
-
-	return domain.CartItem{
-		ProductID: row.ProductID,
-		Price:     domain.Money{Amount: row.PriceAmount, Currency: parsedCurrency},
-		CreatedAt: row.CreatedAt,
-	}, nil
 }
 
 func mapGetCartRowsToDomain(rows []db.GetCartRow) ([]domain.CartItem, error) {
 	var items []domain.CartItem
 
 	for _, row := range rows {
-		item, err := mapGetCartRowToDomain(row)
+		parsedCurrency, err := currency.ParseISO(row.PriceCurrency)
 		if err != nil {
-			return nil, fmt.Errorf("mapGetCartRowToDomain: %w", err)
+			return nil, fmt.Errorf("currency[%s] is not valid: %w", row.PriceCurrency, err)
+		}
+
+		item := domain.CartItem{
+			ProductID: row.ProductID,
+			Price:     domain.Money{Amount: row.PriceAmount, Currency: parsedCurrency},
+			CreatedAt: row.CreatedAt,
 		}
 
 		items = append(items, item)

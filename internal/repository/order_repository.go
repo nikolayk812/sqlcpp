@@ -90,9 +90,9 @@ func (r *orderRepository) GetOrderJoin(ctx context.Context, orderID uuid.UUID) (
 
 	// Iterate over the rows and map to domain.OrderItem
 	for _, row := range dbOrderItemsRows {
-		item, err := mapGetOrderJoinItemsRowToDomain(row)
+		item, err := mapGetOrderJoinItemsRowToDomainOrderItem(row)
 		if err != nil {
-			return o, fmt.Errorf("mapGetOrderJoinItemsRowToDomain: %w", err)
+			return o, fmt.Errorf("mapGetOrderJoinItemsRowToDomainOrderItem: %w", err)
 		}
 		order.Items = append(order.Items, item)
 	}
@@ -145,43 +145,12 @@ func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (
 	return orderID, nil
 }
 
-func mapDomainOrderFilterToDBFilter(filter domain.OrderFilter) db.SearchOrdersParams {
-	var statuses []string
-	for _, status := range filter.Statuses {
-		statuses = append(statuses, string(status))
-	}
-
-	var createdAfter, createdBefore, updatedAfter, updatedBefore *time.Time
-
-	if filter.CreatedAt != nil {
-		createdAfter = filter.CreatedAt.After
-		createdBefore = filter.CreatedAt.Before
-	}
-
-	if filter.UpdatedAt != nil {
-		updatedAfter = filter.UpdatedAt.After
-		updatedBefore = filter.UpdatedAt.Before
-	}
-
-	return db.SearchOrdersParams{
-		Ids:           nilSliceIfEmpty(filter.IDs),
-		OwnerIds:      nilSliceIfEmpty(filter.OwnerIDs),
-		UrlPatterns:   nilSliceIfEmpty(filter.UrlPatterns),
-		Statuses:      nilSliceIfEmpty(statuses),
-		Tags:          nilSliceIfEmpty(filter.Tags),
-		CreatedAfter:  createdAfter,
-		CreatedBefore: createdBefore,
-		UpdatedAfter:  updatedAfter,
-		UpdatedBefore: updatedBefore,
-	}
-}
-
 func (r *orderRepository) SearchOrders(ctx context.Context, filter domain.OrderFilter) ([]domain.Order, error) {
 	if err := filter.Validate(); err != nil {
 		return nil, fmt.Errorf("filter.Validate: %w", err)
 	}
 
-	dbFilter := mapDomainOrderFilterToDBFilter(filter)
+	dbFilter := mapDomainOrderFilterToSearchOrdersParams(filter)
 
 	dbOrders, err := r.q.SearchOrders(ctx, dbFilter)
 	if err != nil {
@@ -315,7 +284,7 @@ func (r *orderRepository) withTxUUID(ctx context.Context, fn func(q *db.Queries)
 	return withTx(ctx, r.pool, r.q, fn)
 }
 
-func mapGetOrderRowToDomain(row db.GetOrderItemsRow) (domain.OrderItem, error) {
+func mapGetOrderItemsRowToDomain(row db.GetOrderItemsRow) (domain.OrderItem, error) {
 	parsedCurrency, err := currency.ParseISO(row.PriceCurrency)
 	if err != nil {
 		return domain.OrderItem{}, fmt.Errorf("currency[%s] is not valid: %w", row.PriceCurrency, err)
@@ -328,13 +297,13 @@ func mapGetOrderRowToDomain(row db.GetOrderItemsRow) (domain.OrderItem, error) {
 	}, nil
 }
 
-func mapGetOrderRowsToDomain(rows []db.GetOrderItemsRow) ([]domain.OrderItem, error) {
+func mapGetOrderItemsRowsToDomain(rows []db.GetOrderItemsRow) ([]domain.OrderItem, error) {
 	var items []domain.OrderItem
 
 	for _, row := range rows {
-		item, err := mapGetOrderRowToDomain(row)
+		item, err := mapGetOrderItemsRowToDomain(row)
 		if err != nil {
-			return nil, fmt.Errorf("mapGetOrderRowToDomain: %w", err)
+			return nil, fmt.Errorf("mapGetOrderItemsRowsToDomain: %w", err)
 		}
 
 		items = append(items, item)
@@ -346,9 +315,9 @@ func mapGetOrderRowsToDomain(rows []db.GetOrderItemsRow) ([]domain.OrderItem, er
 func mapDBOrderToDomain(dbOrder db.GetOrderRow, dbOrderItems []db.GetOrderItemsRow) (domain.Order, error) {
 	var o domain.Order
 
-	items, err := mapGetOrderRowsToDomain(dbOrderItems)
+	items, err := mapGetOrderItemsRowsToDomain(dbOrderItems)
 	if err != nil {
-		return o, fmt.Errorf("mapGetOrderRowsToDomain: %w", err)
+		return o, fmt.Errorf("mapGetOrderItemsRowsToDomain: %w", err)
 	}
 
 	var parsedURL *url.URL
@@ -429,7 +398,7 @@ func mapGetOrderJoinItemsRowToDomainOrder(row db.GetOrderJoinItemsRow) (domain.O
 	}, nil
 }
 
-func mapGetOrderJoinItemsRowToDomain(row db.GetOrderJoinItemsRow) (domain.OrderItem, error) {
+func mapGetOrderJoinItemsRowToDomainOrderItem(row db.GetOrderJoinItemsRow) (domain.OrderItem, error) {
 	parsedCurrency, err := currency.ParseISO(row.ItemPriceCurrency)
 	if err != nil {
 		return domain.OrderItem{}, fmt.Errorf("item currency[%s] is not valid: %w", row.ItemPriceCurrency, err)
@@ -493,6 +462,37 @@ func mapSearchOrdersRowToDomainOrderItem(row db.SearchOrdersRow) (domain.OrderIt
 		ProductID: row.ProductID,
 		Price:     domain.Money{Amount: row.ItemPriceAmount, Currency: parsedCurrency},
 	}, nil
+}
+
+func mapDomainOrderFilterToSearchOrdersParams(filter domain.OrderFilter) db.SearchOrdersParams {
+	var statuses []string
+	for _, status := range filter.Statuses {
+		statuses = append(statuses, string(status))
+	}
+
+	var createdAfter, createdBefore, updatedAfter, updatedBefore *time.Time
+
+	if filter.CreatedAt != nil {
+		createdAfter = filter.CreatedAt.After
+		createdBefore = filter.CreatedAt.Before
+	}
+
+	if filter.UpdatedAt != nil {
+		updatedAfter = filter.UpdatedAt.After
+		updatedBefore = filter.UpdatedAt.Before
+	}
+
+	return db.SearchOrdersParams{
+		Ids:           nilSliceIfEmpty(filter.IDs),
+		OwnerIds:      nilSliceIfEmpty(filter.OwnerIDs),
+		UrlPatterns:   nilSliceIfEmpty(filter.UrlPatterns),
+		Statuses:      nilSliceIfEmpty(statuses),
+		Tags:          nilSliceIfEmpty(filter.Tags),
+		CreatedAfter:  createdAfter,
+		CreatedBefore: createdBefore,
+		UpdatedAfter:  updatedAfter,
+		UpdatedBefore: updatedBefore,
+	}
 }
 
 func urlToString(u *url.URL) string {
