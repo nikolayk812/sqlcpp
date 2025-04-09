@@ -122,34 +122,13 @@ func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (
 			return uuid.Nil, fmt.Errorf("q.InsertOrder: %w", err)
 		}
 
-		// Insert order items using pgx Batch
-		batch := &pgx.Batch{}
-
-		for _, item := range order.Items {
-			batch.Queue(db.InsertOrderItem,
-				orderID,
-				item.ProductID,
-				item.Price.Amount,
-				item.Price.Currency.String(),
-			)
-		}
-
 		tx, ok := q.DB().(pgx.Tx)
 		if !ok {
 			return uuid.Nil, fmt.Errorf("q.DB() is not pgx.Tx")
 		}
 
-		results := tx.SendBatch(ctx, batch)
-		defer func() {
-			if err := results.Close(); err != nil {
-				txErr = errors.Join(txErr, fmt.Errorf("results.Close: %w", err))
-			}
-		}()
-
-		for i := 0; i < batch.Len(); i++ {
-			if _, err := results.Exec(); err != nil {
-				return uuid.Nil, fmt.Errorf("batch item[%d]: %w", i, err)
-			}
+		if err := r.insertOrderItems(ctx, tx, orderID, order.Items); err != nil {
+			return uuid.Nil, fmt.Errorf("q.InsertOrderItems: %w", err)
 		}
 
 		return orderID, nil
@@ -159,6 +138,38 @@ func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (
 	}
 
 	return orderID, nil
+}
+
+func (r *orderRepository) insertOrderItems(ctx context.Context, tx pgx.Tx, orderID uuid.UUID, items []domain.OrderItem) (txErr error) {
+	if tx == nil {
+		return fmt.Errorf("tx is nil")
+	}
+
+	batch := &pgx.Batch{}
+
+	for _, item := range items {
+		batch.Queue(db.InsertOrderItem,
+			orderID,
+			item.ProductID,
+			item.Price.Amount,
+			item.Price.Currency.String(),
+		)
+	}
+
+	results := tx.SendBatch(ctx, batch)
+	defer func() {
+		if err := results.Close(); err != nil {
+			txErr = errors.Join(txErr, fmt.Errorf("results.Close: %w", err))
+		}
+	}()
+
+	for i := 0; i < batch.Len(); i++ {
+		if _, err := results.Exec(); err != nil {
+			return fmt.Errorf("batch item[%d]: %w", i, err)
+		}
+	}
+
+	return nil
 }
 
 func (r *orderRepository) SearchOrders(ctx context.Context, filter domain.OrderFilter) ([]domain.Order, error) {
