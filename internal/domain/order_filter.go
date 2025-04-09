@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 	"time"
 )
 
@@ -50,17 +49,9 @@ func (t TimeRange) Validate() error {
 		return errors.New("both Before and After are nil")
 	}
 
-	if lo.FromPtr(t.Before).IsZero() {
-		return errors.New("before is zero")
-	}
-
-	if lo.FromPtr(t.After).IsZero() {
-		return errors.New("after is zero")
-	}
-
 	if t.Before != nil && t.After != nil {
-		if t.Before.After(*t.After) {
-			return fmt.Errorf("before is after After")
+		if t.Before.Before(*t.After) {
+			return fmt.Errorf("before is before After")
 		}
 	}
 

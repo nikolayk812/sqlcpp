@@ -10,6 +10,7 @@ import (
 	"github.com/nikolayk812/sqlcpp/internal/domain"
 	"github.com/nikolayk812/sqlcpp/internal/port"
 	"github.com/nikolayk812/sqlcpp/internal/repository"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,6 +21,7 @@ import (
 	"net/url"
 	"sort"
 	"testing"
+	"time"
 )
 
 type orderRepositorySuite struct {
@@ -132,8 +134,9 @@ func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
 	tests := []struct {
 		name           string
 		order          domain.Order
-		orderIDMutator func(uuid.UUID) uuid.UUID
 		status         domain.OrderStatus
+		setup          func(uuid.UUID) error
+		orderIDMutator func(uuid.UUID) uuid.UUID
 		wantError      string
 	}{
 		{
@@ -165,6 +168,24 @@ func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
 			status:    "",
 			wantError: "status is empty",
 		},
+		{
+			name:   "update status of soft-deleted order: not found",
+			order:  order,
+			status: domain.OrderStatusShipped,
+			setup: func(u uuid.UUID) error {
+				return suite.repo.SoftDeleteOrder(suite.T().Context(), u)
+			},
+			wantError: "q.UpdateOrderStatus: order not found",
+		},
+		{
+			name:   "update status of deleted order: not found",
+			order:  order,
+			status: domain.OrderStatusShipped,
+			setup: func(u uuid.UUID) error {
+				return suite.repo.DeleteOrder(suite.T().Context(), u)
+			},
+			wantError: "q.UpdateOrderStatus: order not found",
+		},
 	}
 
 	for _, tt := range tests {
@@ -176,6 +197,11 @@ func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
 
 			orderID, err := suite.repo.InsertOrder(ctx, tt.order)
 			require.NoError(t, err)
+
+			if tt.setup != nil {
+				err := tt.setup(orderID)
+				require.NoError(t, err)
+			}
 
 			toUpdateOrderID := orderID
 			if tt.orderIDMutator != nil {
@@ -366,6 +392,57 @@ func (suite *orderRepositorySuite) TestSearchOrders() {
 			filter: domain.OrderFilter{
 				Tags: []string{"not found"},
 			},
+		},
+		{
+			name: "search by createdAt after: 2 found",
+			filter: domain.OrderFilter{
+				CreatedAt: lo.ToPtr(domain.TimeRange{
+					After: lo.ToPtr(time.Now().UTC().Add(-1 * time.Minute)),
+				}),
+			},
+			wantOrders: []domain.Order{order1, order2},
+		},
+		{
+			name: "search by createdAt after: not found",
+			filter: domain.OrderFilter{
+				CreatedAt: lo.ToPtr(domain.TimeRange{
+					After: lo.ToPtr(time.Now().UTC().Add(1 * time.Minute)),
+				}),
+			},
+		},
+		{
+			name: "search by createdAt before: not found",
+			filter: domain.OrderFilter{
+				CreatedAt: lo.ToPtr(domain.TimeRange{
+					Before: lo.ToPtr(time.Now().UTC().Add(-1 * time.Minute)),
+				}),
+			},
+		},
+		{
+			name: "search by createdAt before: 2 found",
+			filter: domain.OrderFilter{
+				CreatedAt: lo.ToPtr(domain.TimeRange{
+					Before: lo.ToPtr(time.Now().UTC().Add(1 * time.Minute)),
+				}),
+			},
+			wantOrders: []domain.Order{order1, order2},
+		},
+		{
+			name: "search by createdAt empty: error",
+			filter: domain.OrderFilter{
+				CreatedAt: lo.ToPtr(domain.TimeRange{}),
+			},
+			wantError: "filter.Validate: createdAt: both Before and After are nil",
+		},
+		{
+			name: "search by createdAt before and after: 2 found",
+			filter: domain.OrderFilter{
+				CreatedAt: lo.ToPtr(domain.TimeRange{
+					Before: lo.ToPtr(time.Now().UTC().Add(1 * time.Minute)),
+					After:  lo.ToPtr(time.Now().UTC().Add(-1 * time.Minute)),
+				}),
+			},
+			wantOrders: []domain.Order{order1, order2},
 		},
 	}
 
