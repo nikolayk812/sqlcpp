@@ -172,6 +172,30 @@ func (r *orderRepository) insertOrderItems(ctx context.Context, tx pgx.Tx, order
 	return nil
 }
 
+func (r *orderRepository) UpdateOrderStatus(ctx context.Context, orderID uuid.UUID, status domain.OrderStatus) error {
+	if orderID == uuid.Nil {
+		return fmt.Errorf("orderID is empty")
+	}
+
+	if status == "" {
+		return fmt.Errorf("status is empty")
+	}
+
+	cmdTag, err := r.q.UpdateOrderStatus(ctx, db.UpdateOrderStatusParams{
+		ID:     orderID,
+		Status: string(status),
+	})
+	if err != nil {
+		return fmt.Errorf("q.UpdateOrderStatus: %w", err)
+	}
+
+	if cmdTag.RowsAffected() == 0 {
+		return fmt.Errorf("q.UpdateOrderStatus: %w", ErrNotFound)
+	}
+
+	return nil
+}
+
 func (r *orderRepository) SearchOrders(ctx context.Context, filter domain.OrderFilter) ([]domain.Order, error) {
 	if err := filter.Validate(); err != nil {
 		return nil, fmt.Errorf("filter.Validate: %w", err)

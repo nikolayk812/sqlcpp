@@ -126,6 +126,82 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 	}
 }
 
+func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
+	order := fakeOrder()
+
+	tests := []struct {
+		name           string
+		order          domain.Order
+		orderIDMutator func(uuid.UUID) uuid.UUID
+		status         domain.OrderStatus
+		wantError      string
+	}{
+		{
+			name:   "update status of existing order: ok",
+			order:  order,
+			status: domain.OrderStatusShipped,
+		},
+		{
+			name:   "update status of non-existing order: not found",
+			order:  order,
+			status: domain.OrderStatusShipped,
+			orderIDMutator: func(_ uuid.UUID) uuid.UUID {
+				return uuid.MustParse(gofakeit.UUID())
+			},
+			wantError: "q.UpdateOrderStatus: order not found",
+		},
+		{
+			name:   "update status with empty order ID: error",
+			order:  order,
+			status: domain.OrderStatusShipped,
+			orderIDMutator: func(_ uuid.UUID) uuid.UUID {
+				return uuid.Nil
+			},
+			wantError: "orderID is empty",
+		},
+		{
+			name:      "update status with empty status: error",
+			order:     order,
+			status:    "",
+			wantError: "status is empty",
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			defer suite.deleteAll()
+
+			t := suite.T()
+			ctx := t.Context()
+
+			orderID, err := suite.repo.InsertOrder(ctx, tt.order)
+			require.NoError(t, err)
+
+			toUpdateOrderID := orderID
+			if tt.orderIDMutator != nil {
+				toUpdateOrderID = tt.orderIDMutator(orderID)
+			}
+
+			// Perform the status update
+			err = suite.repo.UpdateOrderStatus(ctx, toUpdateOrderID, tt.status)
+			if tt.wantError != "" {
+				require.EqualError(t, err, tt.wantError)
+				return
+			}
+			require.NoError(t, err)
+
+			updatedOrder, err := suite.repo.GetOrder(ctx, orderID)
+			require.NoError(t, err)
+
+			expected := tt.order
+			expected.ID = orderID
+			expected.Status = tt.status
+
+			assertOrder(t, expected, updatedOrder)
+		})
+	}
+}
+
 func (suite *orderRepositorySuite) TestGetOrderJoin() {
 	defer suite.deleteAll()
 
@@ -167,16 +243,13 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 
 			o := tt.order
 
-			var (
-				orderID uuid.UUID
-				err     error
-			)
-
-			if o.ID == uuid.Nil {
+			// Determine if we need to create a new order or use an existing ID
+			orderID := o.ID
+			if orderID == uuid.Nil {
+				// Insert a new order since no ID was provided
+				var err error
 				orderID, err = suite.repo.InsertOrder(t.Context(), o)
 				require.NoError(t, err)
-			} else {
-				orderID = o.ID
 			}
 
 			actualOrder, err := suite.repo.GetOrderJoin(t.Context(), orderID)
@@ -316,11 +389,11 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 	order1 := fakeOrder()
 
 	tests := []struct {
-		name        string
-		order       domain.Order
-		setup       func(uuid uuid.UUID) error
-		orderIDFunc func(uuid.UUID) uuid.UUID
-		wantError   string
+		name           string
+		order          domain.Order
+		setup          func(uuid uuid.UUID) error
+		orderIDMutator func(uuid.UUID) uuid.UUID
+		wantError      string
 	}{
 		{
 			name:  "delete existing order: ok",
@@ -329,7 +402,7 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 		{
 			name:  "delete non-existing order: not found",
 			order: order1,
-			orderIDFunc: func(_ uuid.UUID) uuid.UUID {
+			orderIDMutator: func(_ uuid.UUID) uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
 			},
 			wantError: "r.withTx: q.DeleteOrderItems: order not found",
@@ -337,7 +410,7 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 		{
 			name:  "delete with empty order ID: error",
 			order: order1,
-			orderIDFunc: func(_ uuid.UUID) uuid.UUID {
+			orderIDMutator: func(_ uuid.UUID) uuid.UUID {
 				return uuid.Nil
 			},
 			wantError: "orderID is empty",
@@ -357,9 +430,8 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 
 			t := suite.T()
 			ctx := t.Context()
-			o := tt.order
 
-			orderID, err := suite.repo.InsertOrder(t.Context(), o)
+			orderID, err := suite.repo.InsertOrder(t.Context(), tt.order)
 			require.NoError(t, err)
 
 			if tt.setup != nil {
@@ -368,8 +440,8 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 			}
 
 			toDeleteOrderID := orderID
-			if tt.orderIDFunc != nil {
-				toDeleteOrderID = tt.orderIDFunc(orderID)
+			if tt.orderIDMutator != nil {
+				toDeleteOrderID = tt.orderIDMutator(orderID)
 			}
 
 			err = suite.repo.DeleteOrder(ctx, toDeleteOrderID)
@@ -390,11 +462,11 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 	order1 := fakeOrder()
 
 	tests := []struct {
-		name        string
-		order       domain.Order
-		orderIDFunc func(uuid.UUID) uuid.UUID
-		setup       func(uuid.UUID) error
-		wantError   string
+		name           string
+		order          domain.Order
+		orderIDMutator func(uuid.UUID) uuid.UUID
+		setup          func(uuid.UUID) error
+		wantError      string
 	}{
 		{
 			name:  "soft-delete existing order: ok",
@@ -403,7 +475,7 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 		{
 			name:  "soft-delete non-existing order: not found",
 			order: order1,
-			orderIDFunc: func(_ uuid.UUID) uuid.UUID {
+			orderIDMutator: func(_ uuid.UUID) uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
 			},
 			wantError: "q.SoftDeleteOrder: order not found",
@@ -411,7 +483,7 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 		{
 			name:  "soft-delete with empty order ID: error",
 			order: order1,
-			orderIDFunc: func(_ uuid.UUID) uuid.UUID {
+			orderIDMutator: func(_ uuid.UUID) uuid.UUID {
 				return uuid.Nil
 			},
 			wantError: "orderID is empty",
@@ -438,8 +510,8 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 			require.NoError(t, err)
 
 			toDeleteOrderID := orderID
-			if tt.orderIDFunc != nil {
-				toDeleteOrderID = tt.orderIDFunc(orderID)
+			if tt.orderIDMutator != nil {
+				toDeleteOrderID = tt.orderIDMutator(orderID)
 			}
 
 			if tt.setup != nil {
@@ -616,7 +688,7 @@ func assertOrder(t *testing.T, expected domain.Order, actual domain.Order) {
 
 	assert.False(t, actual.CreatedAt.IsZero())
 	assert.False(t, actual.UpdatedAt.IsZero())
-	assert.Equal(t, domain.OrderStatusPending, actual.Status)
+	assert.Nil(t, actual.DeletedAt)
 	assert.NotEqual(t, uuid.Nil, actual.ID)
 }
 

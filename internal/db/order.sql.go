@@ -409,3 +409,18 @@ type SoftDeleteOrderItemParams struct {
 func (q *Queries) SoftDeleteOrderItem(ctx context.Context, arg SoftDeleteOrderItemParams) (pgconn.CommandTag, error) {
 	return q.db.Exec(ctx, SoftDeleteOrderItem, arg.OrderID, arg.ProductID)
 }
+
+const UpdateOrderStatus = `-- name: UpdateOrderStatus :execresult
+UPDATE orders SET status = $2, updated_at = NOW()
+WHERE id = $1
+  AND deleted_at IS NULL
+`
+
+type UpdateOrderStatusParams struct {
+	ID     uuid.UUID
+	Status string
+}
+
+func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, UpdateOrderStatus, arg.ID, arg.Status)
+}

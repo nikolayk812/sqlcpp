@@ -80,6 +80,11 @@ WHERE o.id = $1
   ANd o.deleted_at IS NULL
   AND oi.deleted_at IS NULL;
 
+-- name: UpdateOrderStatus :execresult
+UPDATE orders SET status = $2, updated_at = NOW()
+WHERE id = $1
+  AND deleted_at IS NULL;
+
 -- name: SearchOrders :many
 SELECT o.id,
        o.owner_id,
