@@ -44,23 +44,27 @@ SELECT id,
        tags,
        payload,
        payloadb,
-       deleted_at
+       deleted_at,
+       price_amount,
+       price_currency
 FROM orders
 WHERE id = $1
   AND deleted_at IS NULL
 `
 
 type GetOrderRow struct {
-	ID        uuid.UUID
-	OwnerID   string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Url       *string
-	Status    string
-	Tags      []string
-	Payload   []byte
-	Payloadb  []byte
-	DeletedAt *time.Time
+	ID            uuid.UUID
+	OwnerID       string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Url           *string
+	Status        string
+	Tags          []string
+	Payload       []byte
+	Payloadb      []byte
+	DeletedAt     *time.Time
+	PriceAmount   decimal.Decimal
+	PriceCurrency string
 }
 
 func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (GetOrderRow, error) {
@@ -77,6 +81,8 @@ func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (GetOrderRow, erro
 		&i.Payload,
 		&i.Payloadb,
 		&i.DeletedAt,
+		&i.PriceAmount,
+		&i.PriceCurrency,
 	)
 	return i, err
 }
@@ -130,9 +136,11 @@ SELECT o.id,
        o.tags,
        o.payload,
        o.payloadb,
+       o.price_amount,
+       o.price_currency,
        oi.product_id,
-       oi.price_amount,
-       oi.price_currency
+       oi.price_amount   AS item_price_amount,
+       oi.price_currency AS item_price_currency
 FROM orders o
          JOIN order_items oi ON o.id = oi.order_id
 WHERE o.id = $1
@@ -141,18 +149,20 @@ WHERE o.id = $1
 `
 
 type GetOrderJoinItemsRow struct {
-	ID            uuid.UUID
-	OwnerID       string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	Url           *string
-	Status        string
-	Tags          []string
-	Payload       []byte
-	Payloadb      []byte
-	ProductID     uuid.UUID
-	PriceAmount   decimal.Decimal
-	PriceCurrency string
+	ID                uuid.UUID
+	OwnerID           string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	Url               *string
+	Status            string
+	Tags              []string
+	Payload           []byte
+	Payloadb          []byte
+	PriceAmount       decimal.Decimal
+	PriceCurrency     string
+	ProductID         uuid.UUID
+	ItemPriceAmount   decimal.Decimal
+	ItemPriceCurrency string
 }
 
 func (q *Queries) GetOrderJoinItems(ctx context.Context, id uuid.UUID) ([]GetOrderJoinItemsRow, error) {
@@ -174,9 +184,11 @@ func (q *Queries) GetOrderJoinItems(ctx context.Context, id uuid.UUID) ([]GetOrd
 			&i.Tags,
 			&i.Payload,
 			&i.Payloadb,
-			&i.ProductID,
 			&i.PriceAmount,
 			&i.PriceCurrency,
+			&i.ProductID,
+			&i.ItemPriceAmount,
+			&i.ItemPriceCurrency,
 		); err != nil {
 			return nil, err
 		}
@@ -189,17 +201,19 @@ func (q *Queries) GetOrderJoinItems(ctx context.Context, id uuid.UUID) ([]GetOrd
 }
 
 const insertOrder = `-- name: InsertOrder :one
-INSERT INTO orders (owner_id, url, tags, payload, payloadb)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO orders (owner_id, url, tags, payload, payloadb, price_amount, price_currency)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id
 `
 
 type InsertOrderParams struct {
-	OwnerID  string
-	Url      *string
-	Tags     []string
-	Payload  []byte
-	Payloadb []byte
+	OwnerID       string
+	Url           *string
+	Tags          []string
+	Payload       []byte
+	Payloadb      []byte
+	PriceAmount   decimal.Decimal
+	PriceCurrency string
 }
 
 func (q *Queries) InsertOrder(ctx context.Context, arg InsertOrderParams) (uuid.UUID, error) {
@@ -209,6 +223,8 @@ func (q *Queries) InsertOrder(ctx context.Context, arg InsertOrderParams) (uuid.
 		arg.Tags,
 		arg.Payload,
 		arg.Payloadb,
+		arg.PriceAmount,
+		arg.PriceCurrency,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -247,9 +263,11 @@ SELECT o.id,
        o.tags,
        o.payload,
        o.payloadb,
+       o.price_amount,
+       o.price_currency,
        oi.product_id,
-       oi.price_amount,
-       oi.price_currency
+       oi.price_amount   AS item_price_amount,
+       oi.price_currency AS item_price_currency
 FROM orders o
          JOIN order_items oi ON o.id = oi.order_id
 WHERE (
@@ -292,18 +310,20 @@ type SearchOrdersParams struct {
 }
 
 type SearchOrdersRow struct {
-	ID            uuid.UUID
-	OwnerID       string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	Url           *string
-	Status        string
-	Tags          []string
-	Payload       []byte
-	Payloadb      []byte
-	ProductID     uuid.UUID
-	PriceAmount   decimal.Decimal
-	PriceCurrency string
+	ID                uuid.UUID
+	OwnerID           string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	Url               *string
+	Status            string
+	Tags              []string
+	Payload           []byte
+	Payloadb          []byte
+	PriceAmount       decimal.Decimal
+	PriceCurrency     string
+	ProductID         uuid.UUID
+	ItemPriceAmount   decimal.Decimal
+	ItemPriceCurrency string
 }
 
 func (q *Queries) SearchOrders(ctx context.Context, arg SearchOrdersParams) ([]SearchOrdersRow, error) {
@@ -335,9 +355,11 @@ func (q *Queries) SearchOrders(ctx context.Context, arg SearchOrdersParams) ([]S
 			&i.Tags,
 			&i.Payload,
 			&i.Payloadb,
-			&i.ProductID,
 			&i.PriceAmount,
 			&i.PriceCurrency,
+			&i.ProductID,
+			&i.ItemPriceAmount,
+			&i.ItemPriceCurrency,
 		); err != nil {
 			return nil, err
 		}

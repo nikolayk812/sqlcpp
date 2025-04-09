@@ -9,6 +9,7 @@ import (
 type Order struct {
 	ID       uuid.UUID
 	OwnerID  string
+	Price    Money
 	Items    []OrderItem
 	Url      *url.URL
 	Status   OrderStatus

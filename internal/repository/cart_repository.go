@@ -51,17 +51,15 @@ func (r *cartRepository) GetCart(ctx context.Context, ownerID string) (domain.Ca
 }
 
 func (r *cartRepository) AddItem(ctx context.Context, ownerID string, item domain.CartItem) error {
-	arg := db.AddItemParams{
+	err := r.q.AddItem(ctx, db.AddItemParams{
 		OwnerID:       ownerID,
 		ProductID:     item.ProductID,
 		PriceAmount:   item.Price.Amount,
 		PriceCurrency: item.Price.Currency.String(),
-	}
-
-	if err := r.q.AddItem(ctx, arg); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("q.AddItem: %w", err)
 	}
-
 	return nil
 }
 
@@ -73,7 +71,6 @@ func (r *cartRepository) DeleteItem(ctx context.Context, ownerID string, product
 	if err != nil {
 		return false, fmt.Errorf("q.DeleteItem: %w", err)
 	}
-
 	return rowsAffected > 0, nil
 }
 

@@ -1,10 +1,12 @@
 CREATE TABLE IF NOT EXISTS orders
 (
-    id         UUID      DEFAULT gen_random_uuid() NOT NULL,
-    owner_id   VARCHAR(255)                        NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    deleted_at TIMESTAMP DEFAULT NULL,
+    id             UUID      DEFAULT gen_random_uuid() NOT NULL,
+    owner_id       VARCHAR(255)                        NOT NULL,
+    price_amount   DECIMAL                             NOT NULL,
+    price_currency VARCHAR(3)                          NOT NULL,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted_at     TIMESTAMP DEFAULT NULL,
     PRIMARY KEY (id)
 );
 

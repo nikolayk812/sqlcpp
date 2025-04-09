@@ -20,16 +20,18 @@ type CartItem struct {
 }
 
 type Order struct {
-	ID        uuid.UUID
-	OwnerID   string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt *time.Time
-	Url       *string
-	Tags      []string
-	Status    string
-	Payload   []byte
-	Payloadb  []byte
+	ID            uuid.UUID
+	OwnerID       string
+	PriceAmount   decimal.Decimal
+	PriceCurrency string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	DeletedAt     *time.Time
+	Url           *string
+	Tags          []string
+	Status        string
+	Payload       []byte
+	Payloadb      []byte
 }
 
 type OrderItem struct {

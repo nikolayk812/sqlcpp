@@ -8,14 +8,16 @@ SELECT id,
        tags,
        payload,
        payloadb,
-       deleted_at
+       deleted_at,
+       price_amount,
+       price_currency
 FROM orders
 WHERE id = $1
   AND deleted_at IS NULL;
 
 -- name: InsertOrder :one
-INSERT INTO orders (owner_id, url, tags, payload, payloadb)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO orders (owner_id, url, tags, payload, payloadb, price_amount, price_currency)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id;
 
 -- name: GetOrderItems :many
@@ -67,9 +69,11 @@ SELECT o.id,
        o.tags,
        o.payload,
        o.payloadb,
+       o.price_amount,
+       o.price_currency,
        oi.product_id,
-       oi.price_amount,
-       oi.price_currency
+       oi.price_amount   AS item_price_amount,
+       oi.price_currency AS item_price_currency
 FROM orders o
          JOIN order_items oi ON o.id = oi.order_id
 WHERE o.id = $1
@@ -86,9 +90,11 @@ SELECT o.id,
        o.tags,
        o.payload,
        o.payloadb,
+       o.price_amount,
+       o.price_currency,
        oi.product_id,
-       oi.price_amount,
-       oi.price_currency
+       oi.price_amount   AS item_price_amount,
+       oi.price_currency AS item_price_currency
 FROM orders o
          JOIN order_items oi ON o.id = oi.order_id
 WHERE (

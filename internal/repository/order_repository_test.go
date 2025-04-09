@@ -479,8 +479,14 @@ func (suite *orderRepositorySuite) deleteAll() {
 }
 
 func fakeOrder() domain.Order {
+	currencyUnit := fakeCurrency() // it has to be the same for all items
+	orderAmount := decimal.Zero
+
 	var items []domain.OrderItem
 	for i := 0; i < gofakeit.Number(1, 5); i++ {
+		fakeItem := fakeOrderItem()
+		fakeItem.Price.Currency = currencyUnit
+		orderAmount = orderAmount.Add(fakeItem.Price.Amount)
 		items = append(items, fakeOrderItem())
 	}
 
@@ -497,6 +503,10 @@ func fakeOrder() domain.Order {
 		Tags:     tags,
 		Payload:  fakeJson(),
 		PayloadB: fakeJson(),
+		Price: domain.Money{
+			Amount:   orderAmount,
+			Currency: currencyUnit,
+		},
 	}
 }
 

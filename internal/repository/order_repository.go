@@ -110,11 +110,13 @@ func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (
 	orderID, err := r.withTxUUID(ctx, func(q *db.Queries) (uuid.UUID, error) {
 		// Insert the order and get the generated order ID
 		orderID, err := q.InsertOrder(ctx, db.InsertOrderParams{
-			OwnerID:  order.OwnerID,
-			Url:      lo.ToPtr(urlToString(order.Url)),
-			Tags:     order.Tags,
-			Payload:  emptyJSONIfNil(order.Payload),
-			Payloadb: order.PayloadB,
+			OwnerID:       order.OwnerID,
+			Url:           lo.ToPtr(urlToString(order.Url)),
+			Tags:          order.Tags,
+			Payload:       emptyJSONIfNil(order.Payload),
+			Payloadb:      order.PayloadB,
+			PriceAmount:   order.Price.Amount,
+			PriceCurrency: order.Price.Currency.String(),
 		})
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("q.InsertOrder: %w", err)
@@ -363,6 +365,11 @@ func mapDBOrderToDomain(dbOrder db.GetOrderRow, dbOrderItems []db.GetOrderItemsR
 		return o, fmt.Errorf("domain.ToOrderStatus[%s]: %w", dbOrder.Status, err)
 	}
 
+	parsedCurrency, err := currency.ParseISO(dbOrder.PriceCurrency)
+	if err != nil {
+		return o, fmt.Errorf("currency.ParseISO[%s]: %w", dbOrder.PriceCurrency, err)
+	}
+
 	return domain.Order{
 		ID:        dbOrder.ID,
 		OwnerID:   dbOrder.OwnerID,
@@ -374,6 +381,10 @@ func mapDBOrderToDomain(dbOrder db.GetOrderRow, dbOrderItems []db.GetOrderItemsR
 		Tags:      dbOrder.Tags,
 		Payload:   dbOrder.Payload,
 		PayloadB:  dbOrder.Payloadb,
+		Price: domain.Money{
+			Amount:   dbOrder.PriceAmount,
+			Currency: parsedCurrency,
+		},
 	}, nil
 }
 
@@ -396,6 +407,11 @@ func mapGetOrderJoinItemsRowToDomainOrder(row db.GetOrderJoinItemsRow) (domain.O
 		return o, fmt.Errorf("domain.ToOrderStatus[%s]: %w", row.Status, err)
 	}
 
+	parsedCurrency, err := currency.ParseISO(row.PriceCurrency)
+	if err != nil {
+		return o, fmt.Errorf("currency.ParseISO[%s]: %w", row.PriceCurrency, err)
+	}
+
 	return domain.Order{
 		ID:        row.ID,
 		OwnerID:   row.OwnerID,
@@ -406,18 +422,22 @@ func mapGetOrderJoinItemsRowToDomainOrder(row db.GetOrderJoinItemsRow) (domain.O
 		Tags:      row.Tags,
 		Payload:   row.Payload,
 		PayloadB:  row.Payloadb,
+		Price: domain.Money{
+			Amount:   row.PriceAmount,
+			Currency: parsedCurrency,
+		},
 	}, nil
 }
 
 func mapGetOrderJoinItemsRowToDomain(row db.GetOrderJoinItemsRow) (domain.OrderItem, error) {
-	parsedCurrency, err := currency.ParseISO(row.PriceCurrency)
+	parsedCurrency, err := currency.ParseISO(row.ItemPriceCurrency)
 	if err != nil {
-		return domain.OrderItem{}, fmt.Errorf("currency[%s] is not valid: %w", row.PriceCurrency, err)
+		return domain.OrderItem{}, fmt.Errorf("item currency[%s] is not valid: %w", row.ItemPriceCurrency, err)
 	}
 
 	return domain.OrderItem{
 		ProductID: row.ProductID,
-		Price:     domain.Money{Amount: row.PriceAmount, Currency: parsedCurrency},
+		Price:     domain.Money{Amount: row.ItemPriceAmount, Currency: parsedCurrency},
 		CreatedAt: row.CreatedAt,
 	}, nil
 }
@@ -441,6 +461,11 @@ func mapSearchOrdersRowToDomainOrder(row db.SearchOrdersRow) (domain.Order, erro
 		return o, fmt.Errorf("domain.ToOrderStatus[%s]: %w", row.Status, err)
 	}
 
+	parsedCurrency, err := currency.ParseISO(row.PriceCurrency)
+	if err != nil {
+		return o, fmt.Errorf("currency.ParseISO[%s]: %w", row.PriceCurrency, err)
+	}
+
 	return domain.Order{
 		ID:        row.ID,
 		OwnerID:   row.OwnerID,
@@ -451,18 +476,22 @@ func mapSearchOrdersRowToDomainOrder(row db.SearchOrdersRow) (domain.Order, erro
 		PayloadB:  row.Payloadb,
 		CreatedAt: row.CreatedAt,
 		UpdatedAt: row.UpdatedAt,
+		Price: domain.Money{
+			Amount:   row.PriceAmount,
+			Currency: parsedCurrency,
+		},
 	}, nil
 }
 
 func mapSearchOrdersRowToDomainOrderItem(row db.SearchOrdersRow) (domain.OrderItem, error) {
-	parsedCurrency, err := currency.ParseISO(row.PriceCurrency)
+	parsedCurrency, err := currency.ParseISO(row.ItemPriceCurrency)
 	if err != nil {
-		return domain.OrderItem{}, fmt.Errorf("currency[%s] is not valid: %w", row.PriceCurrency, err)
+		return domain.OrderItem{}, fmt.Errorf("item currency[%s] is not valid: %w", row.ItemPriceCurrency, err)
 	}
 
 	return domain.OrderItem{
 		ProductID: row.ProductID,
-		Price:     domain.Money{Amount: row.PriceAmount, Currency: parsedCurrency},
+		Price:     domain.Money{Amount: row.ItemPriceAmount, Currency: parsedCurrency},
 	}, nil
 }
 
