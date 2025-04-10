@@ -371,17 +371,6 @@ func (q *Queries) SearchOrders(ctx context.Context, arg SearchOrdersParams) ([]S
 	return items, nil
 }
 
-const SetOrderUpdated = `-- name: SetOrderUpdated :execresult
-UPDATE orders
-SET updated_at = NOW()
-WHERE id = $1
-  AND deleted_at IS NULL
-`
-
-func (q *Queries) SetOrderUpdated(ctx context.Context, id uuid.UUID) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, SetOrderUpdated, id)
-}
-
 const SoftDeleteOrder = `-- name: SoftDeleteOrder :execresult
 UPDATE orders
 SET deleted_at = NOW()
@@ -410,8 +399,25 @@ func (q *Queries) SoftDeleteOrderItem(ctx context.Context, arg SoftDeleteOrderIt
 	return q.db.Exec(ctx, SoftDeleteOrderItem, arg.OrderID, arg.ProductID)
 }
 
+const UpdateOrderPrice = `-- name: UpdateOrderPrice :execresult
+UPDATE orders
+SET price_amount = (SELECT COALESCE(SUM(price), 0)
+                   FROM order_items
+                   WHERE order_id = $1
+                     AND deleted_at IS NULL),
+    updated_at  = NOW()
+WHERE id = $1
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) UpdateOrderPrice(ctx context.Context, orderID uuid.UUID) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, UpdateOrderPrice, orderID)
+}
+
 const UpdateOrderStatus = `-- name: UpdateOrderStatus :execresult
-UPDATE orders SET status = $2, updated_at = NOW()
+UPDATE orders
+SET status     = $2,
+    updated_at = NOW()
 WHERE id = $1
   AND deleted_at IS NULL
 `

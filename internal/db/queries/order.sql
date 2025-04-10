@@ -53,9 +53,13 @@ WHERE order_id = $1
   AND product_id = $2
   AND deleted_at IS NULL;
 
--- name: SetOrderUpdated :execresult
+-- name: UpdateOrderPrice :execresult
 UPDATE orders
-SET updated_at = NOW()
+SET price_amount = (SELECT COALESCE(SUM(price), 0)
+                   FROM order_items
+                   WHERE order_id = $1
+                     AND deleted_at IS NULL),
+    updated_at  = NOW()
 WHERE id = $1
   AND deleted_at IS NULL;
 
@@ -81,7 +85,9 @@ WHERE o.id = $1
   AND oi.deleted_at IS NULL;
 
 -- name: UpdateOrderStatus :execresult
-UPDATE orders SET status = $2, updated_at = NOW()
+UPDATE orders
+SET status     = $2,
+    updated_at = NOW()
 WHERE id = $1
   AND deleted_at IS NULL;
 

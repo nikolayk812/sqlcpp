@@ -22,3 +22,7 @@ CREATE TABLE IF NOT EXISTS order_items
     FOREIGN KEY (order_id) REFERENCES orders (id)
 );
 
+CREATE INDEX idx_order_items_deleted_at_null
+    ON order_items (deleted_at)
+    WHERE deleted_at IS NULL;
+

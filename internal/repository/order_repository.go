@@ -302,13 +302,13 @@ func (r *orderRepository) SoftDeleteOrderItem(ctx context.Context, orderID, prod
 			return fmt.Errorf("q.SoftDeleteOrderItem: %w", ErrNotFound)
 		}
 
-		cmdTag, err = r.q.SetOrderUpdated(ctx, orderID)
+		cmdTag, err = r.q.UpdateOrderPrice(ctx, orderID)
 		if err != nil {
-			return fmt.Errorf("q.SetOrderUpdated: %w", err)
+			return fmt.Errorf("q.UpdateOrderPrice: %w", err)
 		}
 
 		if cmdTag.RowsAffected() == 0 {
-			return fmt.Errorf("q.SetOrderUpdated: %w", ErrNotFound)
+			return fmt.Errorf("q.UpdateOrderPrice: %w", ErrNotFound)
 		}
 
 		return nil
