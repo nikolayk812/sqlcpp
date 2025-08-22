@@ -19,6 +19,7 @@ import (
 	"go.uber.org/goleak"
 	"golang.org/x/text/currency"
 	"net/url"
+	"os"
 	"sort"
 	"testing"
 	"time"
@@ -34,6 +35,8 @@ type orderRepositorySuite struct {
 
 // entry point to run the tests in the suite
 func TestOrderRepositorySuite(t *testing.T) {
+	require.NoError(t, os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true"))
+
 	// Verifies no leaks after all tests in the suite run.
 	defer goleak.VerifyNone(t)
 
