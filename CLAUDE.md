@@ -6,21 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Code Generation
 ```bash
-sqlc generate
+make generate
 ```
-Regenerate type-safe Go code from SQL queries after modifying files in `internal/db/queries/` or `internal/migrations/`.
+Regenerate type-safe Go code from SQL queries and add required DB() method. Use this instead of `sqlc generate` directly.
+
+Alternative manual approach:
+```bash
+sqlc generate
+./scripts/post-sqlc-generate.sh
+```
 
 ### Testing
 ```bash
-go test ./...                    # Run all tests
+make test                        # Run all tests
 go test ./internal/repository/   # Run specific package tests
 go test -v ./...                 # Verbose test output with details
 ```
 
 ### Build and Development
 ```bash
-go build ./...          # Build all packages
-go mod tidy            # Clean up module dependencies
+make build             # Build all packages
+make clean             # Clean and tidy dependencies
 go mod download        # Download dependencies
 go vet ./...           # Static analysis
 go fmt ./...           # Format code
@@ -55,7 +61,7 @@ This project follows **hexagonal architecture** with clear separation of concern
 1. Modify domain models in `internal/domain/`
 2. Update SQL schema in `internal/migrations/`
 3. Add/modify queries in `internal/db/queries/`
-4. Run `sqlc generate` to update generated code
+4. Run `make generate` to update generated code
 5. Implement repository methods in `internal/repository/`
 6. Write integration tests using Testcontainers
 7. Run `go test ./...` to validate changes
