@@ -1,6 +1,6 @@
 .PHONY: generate test build
 
-generate:
+sqlc:
 	sqlc generate
 	./scripts/post-sqlc-generate.sh
 

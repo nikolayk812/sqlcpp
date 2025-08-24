@@ -22,7 +22,7 @@ jobs:
       run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
         
     - name: Generate SQLC code
-      run: make generate
+      run: make sqlc
     
     - name: Run tests
       run: make test

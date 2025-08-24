@@ -29,6 +29,7 @@ func NewOrder(dbtx db.DBTX) (port.OrderRepository, error) {
 	if dbtx == nil {
 		return nil, fmt.Errorf("dbtx is nil")
 	}
+
 	return &orderRepository{
 		q:    db.New(dbtx),
 		dbtx: dbtx,
