@@ -58,7 +58,7 @@ func (suite *orderRepositorySuite) SetupSuite() {
 	suite.pool, err = pgxpool.New(ctx, connStr)
 	suite.NoError(err)
 
-	suite.repo = repository.NewOrder(suite.pool)
+	suite.repo, err = repository.NewOrder(suite.pool)
 	suite.NoError(err)
 }
 
@@ -485,7 +485,7 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 			orderIDMutator: func(_ uuid.UUID) uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
 			},
-			wantError: "r.withTx: q.DeleteOrderItems: order not found",
+			wantError: "withTx: q.DeleteOrderItems: order not found",
 		},
 		{
 			name:  "delete with empty order ID: error",
@@ -533,7 +533,7 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 
 			// Verify the order is deleted
 			_, err = suite.repo.GetOrder(ctx, orderID)
-			assert.EqualError(t, err, "r.withTxOrder: q.GetOrder: order not found")
+			assert.EqualError(t, err, "withTx: q.GetOrder: order not found")
 		})
 	}
 }
@@ -608,7 +608,7 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 
 			// Verify the order is soft-deleted
 			_, err = suite.repo.GetOrder(ctx, orderID)
-			assert.EqualError(t, err, "r.withTxOrder: q.GetOrder: order not found")
+			assert.EqualError(t, err, "withTx: q.GetOrder: order not found")
 		})
 	}
 }

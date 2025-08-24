@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nikolayk812/sqlcpp/internal/db"
 	"github.com/nikolayk812/sqlcpp/internal/domain"
 	"github.com/nikolayk812/sqlcpp/internal/port"
@@ -22,27 +21,24 @@ var (
 
 type orderRepository struct {
 	q    *db.Queries
-	pool *pgxpool.Pool
+	dbtx db.DBTX
 }
 
-func NewOrder(pool *pgxpool.Pool) port.OrderRepository {
-	return &orderRepository{
-		q:    db.New(pool),
-		pool: pool,
+// NewOrder creates a new OrderRepository with the given dbtx (pgx.Tx or pgxpool.Pool).
+func NewOrder(dbtx db.DBTX) (port.OrderRepository, error) {
+	if dbtx == nil {
+		return nil, fmt.Errorf("dbtx is nil")
 	}
-}
-
-func NewOrderWithTx(tx pgx.Tx) port.OrderRepository {
 	return &orderRepository{
-		q:    db.New(tx),
-		pool: nil, // use provided transaction instead
-	}
+		q:    db.New(dbtx),
+		dbtx: dbtx,
+	}, nil
 }
 
 func (r *orderRepository) GetOrder(ctx context.Context, orderID uuid.UUID) (domain.Order, error) {
 	var o domain.Order
 
-	order, err := r.withTxOrder(ctx, func(q *db.Queries) (domain.Order, error) {
+	order, err := withTx(ctx, r.dbtx, func(q *db.Queries) (domain.Order, error) {
 		dbOrder, err := q.GetOrder(ctx, orderID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -64,7 +60,7 @@ func (r *orderRepository) GetOrder(ctx context.Context, orderID uuid.UUID) (doma
 		return domainOrder, nil
 	})
 	if err != nil {
-		return o, fmt.Errorf("r.withTxOrder: %w", err)
+		return o, fmt.Errorf("withTx: %w", err)
 	}
 
 	return order, nil
@@ -105,9 +101,7 @@ func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (
 		return uuid.Nil, errors.New("no items in order")
 	}
 
-	var orderID uuid.UUID
-
-	orderID, err := r.withTxUUID(ctx, func(q *db.Queries) (_ uuid.UUID, txErr error) {
+	orderID, err := withTx(ctx, r.dbtx, func(q *db.Queries) (uuid.UUID, error) {
 		// Insert the order and get the generated order ID
 		orderID, err := q.InsertOrder(ctx, db.InsertOrderParams{
 			OwnerID:       order.OwnerID,
@@ -128,13 +122,13 @@ func (r *orderRepository) InsertOrder(ctx context.Context, order domain.Order) (
 		}
 
 		if err := r.insertOrderItems(ctx, tx, orderID, order.Items); err != nil {
-			return uuid.Nil, fmt.Errorf("q.InsertOrderItems: %w", err)
+			return uuid.Nil, fmt.Errorf("r.insertOrderItems: %w", err)
 		}
 
 		return orderID, nil
 	})
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("r.withTxOrder: %w", err)
+		return uuid.Nil, fmt.Errorf("withTx: %w", err)
 	}
 
 	return orderID, nil
@@ -237,28 +231,30 @@ func (r *orderRepository) DeleteOrder(ctx context.Context, orderID uuid.UUID) er
 		return fmt.Errorf("orderID is empty")
 	}
 
-	if err := r.withTx(ctx, func(q *db.Queries) error {
+	zero := struct{}{}
+	_, err := withTx(ctx, r.dbtx, func(q *db.Queries) (struct{}, error) {
 		cmdTag, err := q.DeleteOrderItems(ctx, orderID)
 		if err != nil {
-			return fmt.Errorf("q.DeleteOrderItems: %w", err)
+			return zero, fmt.Errorf("q.DeleteOrderItems: %w", err)
 		}
 
 		if cmdTag.RowsAffected() == 0 {
-			return fmt.Errorf("q.DeleteOrderItems: %w", ErrNotFound)
+			return zero, fmt.Errorf("q.DeleteOrderItems: %w", ErrNotFound)
 		}
 
 		cmdTag, err = q.DeleteOrder(ctx, orderID)
 		if err != nil {
-			return fmt.Errorf("q.DeleteOrder: %w", err)
+			return zero, fmt.Errorf("q.DeleteOrder: %w", err)
 		}
 
 		if cmdTag.RowsAffected() == 0 {
-			return fmt.Errorf("q.DeleteOrder: %w", ErrNotFound)
+			return zero, fmt.Errorf("q.DeleteOrder: %w", ErrNotFound)
 		}
 
-		return nil
-	}); err != nil {
-		return fmt.Errorf("r.withTx: %w", err)
+		return zero, nil
+	})
+	if err != nil {
+		return fmt.Errorf("withTx: %w", err)
 	}
 
 	return nil
@@ -289,50 +285,36 @@ func (r *orderRepository) SoftDeleteOrderItem(ctx context.Context, orderID, prod
 		return fmt.Errorf("productID is empty")
 	}
 
-	if err := r.withTx(ctx, func(q *db.Queries) error {
-		cmdTag, err := r.q.SoftDeleteOrderItem(ctx, db.SoftDeleteOrderItemParams{
+	zero := struct{}{}
+	_, err := withTx(ctx, r.dbtx, func(q *db.Queries) (struct{}, error) {
+		cmdTag, err := q.SoftDeleteOrderItem(ctx, db.SoftDeleteOrderItemParams{
 			OrderID:   orderID,
 			ProductID: productID,
 		})
 		if err != nil {
-			return fmt.Errorf("q.SoftDeleteOrderItem: %w", err)
+			return zero, fmt.Errorf("q.SoftDeleteOrderItem: %w", err)
 		}
 
 		if cmdTag.RowsAffected() == 0 {
-			return fmt.Errorf("q.SoftDeleteOrderItem: %w", ErrNotFound)
+			return zero, fmt.Errorf("q.SoftDeleteOrderItem: %w", ErrNotFound)
 		}
 
-		cmdTag, err = r.q.UpdateOrderPrice(ctx, orderID)
+		cmdTag, err = q.UpdateOrderPrice(ctx, orderID)
 		if err != nil {
-			return fmt.Errorf("q.UpdateOrderPrice: %w", err)
+			return zero, fmt.Errorf("q.UpdateOrderPrice: %w", err)
 		}
 
 		if cmdTag.RowsAffected() == 0 {
-			return fmt.Errorf("q.UpdateOrderPrice: %w", ErrNotFound)
+			return zero, fmt.Errorf("q.UpdateOrderPrice: %w", ErrNotFound)
 		}
 
-		return nil
-	}); err != nil {
-		return fmt.Errorf("r.withTx: %w", err)
+		return zero, nil
+	})
+	if err != nil {
+		return fmt.Errorf("withTx: %w", err)
 	}
 
 	return nil
-}
-
-func (r *orderRepository) withTx(ctx context.Context, fn func(q *db.Queries) error) error {
-	_, err := withTx(ctx, r.pool, r.q, func(q *db.Queries) (struct{}, error) {
-		err := fn(q)
-		return struct{}{}, err
-	})
-	return err
-}
-
-func (r *orderRepository) withTxOrder(ctx context.Context, fn func(q *db.Queries) (domain.Order, error)) (domain.Order, error) {
-	return withTx(ctx, r.pool, r.q, fn)
-}
-
-func (r *orderRepository) withTxUUID(ctx context.Context, fn func(q *db.Queries) (uuid.UUID, error)) (uuid.UUID, error) {
-	return withTx(ctx, r.pool, r.q, fn)
 }
 
 func mapGetOrderItemsRowToDomain(row db.GetOrderItemsRow) (domain.OrderItem, error) {

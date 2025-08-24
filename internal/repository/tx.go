@@ -9,15 +9,24 @@ import (
 	"github.com/nikolayk812/sqlcpp/internal/db"
 )
 
-func withTx[T any](ctx context.Context, pool *pgxpool.Pool, q *db.Queries, fn func(q *db.Queries) (T, error)) (_ T, txErr error) {
+// withTx executes fn within a transaction if the repository was created with a pool,
+// or uses the existing transaction if the repository was created with a transaction
+func withTx[T any](ctx context.Context, dbtx db.DBTX, fn func(q *db.Queries) (T, error)) (_ T, txErr error) {
 	var zero T
 
-	// If we're already in a transaction (pool is nil), just use the existing queries
-	if pool == nil {
+	// Check if we're already in a transaction by trying to cast to pgx.Tx
+	if tx, ok := dbtx.(pgx.Tx); ok {
+		// Already in a transaction, just use it
+		q := db.New(tx)
 		return fn(q)
 	}
 
-	// Otherwise, create a new transaction
+	// Must be a pool, create a new transaction
+	pool, ok := dbtx.(*pgxpool.Pool)
+	if !ok {
+		return zero, fmt.Errorf("dbtx is neither pgx.Tx nor *pgxpool.Pool: %T", dbtx)
+	}
+
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return zero, err
