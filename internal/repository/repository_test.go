@@ -8,7 +8,7 @@ import (
 )
 
 func startPostgres(ctx context.Context) (testcontainers.Container, string, error) {
-	postgresContainer, err := postgres.Run(ctx, "postgres:17.6-alpine3.21",
+	postgresContainer, err := postgres.Run(ctx, "postgres:17.6-alpine3.22",
 		postgres.BasicWaitStrategies(),
 		postgres.WithInitScripts(
 			"../migrations/01_orders.up.sql",
