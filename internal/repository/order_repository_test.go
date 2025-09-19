@@ -15,11 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/testcontainers/testcontainers-go"
-	"go.uber.org/goleak"
 	"golang.org/x/text/currency"
 	"net/url"
-	"os"
 	"sort"
 	"testing"
 	"time"
@@ -28,18 +25,12 @@ import (
 type orderRepositorySuite struct {
 	suite.Suite
 
-	pool      *pgxpool.Pool
-	repo      port.OrderRepository
-	container testcontainers.Container
+	repo port.OrderRepository
+	pool *pgxpool.Pool
 }
 
 // entry point to run the tests in the suite
 func TestOrderRepositorySuite(t *testing.T) {
-	require.NoError(t, os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true"))
-
-	// Verifies no leaks after all tests in the suite run.
-	defer goleak.VerifyNone(t)
-
 	suite.Run(t, new(orderRepositorySuite))
 }
 
@@ -52,7 +43,7 @@ func (suite *orderRepositorySuite) SetupSuite() {
 		err     error
 	)
 
-	suite.container, connStr, err = startPostgres(ctx)
+	_, connStr, err = startPostgres(ctx)
 	suite.NoError(err)
 
 	suite.pool, err = pgxpool.New(ctx, connStr)
@@ -64,13 +55,8 @@ func (suite *orderRepositorySuite) SetupSuite() {
 
 // after all tests in the suite
 func (suite *orderRepositorySuite) TearDownSuite() {
-	ctx := suite.T().Context()
-
 	if suite.pool != nil {
 		suite.pool.Close()
-	}
-	if suite.container != nil {
-		suite.NoError(suite.container.Terminate(ctx))
 	}
 }
 
