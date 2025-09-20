@@ -38,12 +38,7 @@ func TestOrderRepositorySuite(t *testing.T) {
 func (suite *orderRepositorySuite) SetupSuite() {
 	ctx := suite.T().Context()
 
-	var (
-		connStr string
-		err     error
-	)
-
-	_, connStr, err = startPostgres(ctx)
+	_, connStr, err := startPostgres(ctx)
 	suite.NoError(err)
 
 	suite.pool, err = pgxpool.New(ctx, connStr)
@@ -70,12 +65,12 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 	}{
 		{
 			name:    "valid order with all fields: ok",
-			orderFn: fakeOrder,
+			orderFn: randomOrder,
 		},
 		{
 			name: "invalid order, no items: fail",
 			orderFn: func() domain.Order {
-				o := fakeOrder()
+				o := randomOrder()
 				o.Items = nil
 				return o
 			},
@@ -83,7 +78,7 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 		},
 		{
 			name:    "valid order, nil tags, nil url: ok",
-			orderFn: fakeOrder,
+			orderFn: randomOrder,
 		},
 	}
 
@@ -123,12 +118,12 @@ func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
 	}{
 		{
 			name:      "update status of existing order: ok",
-			orderFn:   fakeOrder,
+			orderFn:   randomOrder,
 			newStatus: domain.OrderStatusShipped,
 		},
 		{
 			name:      "update status of non-existing order: not found",
-			orderFn:   fakeOrder,
+			orderFn:   randomOrder,
 			newStatus: domain.OrderStatusShipped,
 			orderIDToUpdateFn: func() uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
@@ -137,7 +132,7 @@ func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
 		},
 		{
 			name:      "update status with empty order ID: error",
-			orderFn:   fakeOrder,
+			orderFn:   randomOrder,
 			newStatus: domain.OrderStatusShipped,
 			orderIDToUpdateFn: func() uuid.UUID {
 				return uuid.Nil
@@ -146,13 +141,13 @@ func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
 		},
 		{
 			name:      "update status with empty status: error",
-			orderFn:   fakeOrder,
+			orderFn:   randomOrder,
 			newStatus: "",
 			wantError: "status is empty",
 		},
 		{
 			name:      "update status of soft-deleted order: not found",
-			orderFn:   fakeOrder,
+			orderFn:   randomOrder,
 			newStatus: domain.OrderStatusShipped,
 			setup: func(u uuid.UUID) error {
 				return suite.repo.SoftDeleteOrder(suite.T().Context(), u)
@@ -161,7 +156,7 @@ func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
 		},
 		{
 			name:      "update status of deleted order: not found",
-			orderFn:   fakeOrder,
+			orderFn:   randomOrder,
 			newStatus: domain.OrderStatusShipped,
 			setup: func(u uuid.UUID) error {
 				return suite.repo.DeleteOrder(suite.T().Context(), u)
@@ -221,7 +216,7 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 	}{
 		{
 			name:    "existing order: ok",
-			orderFn: fakeOrder,
+			orderFn: randomOrder,
 		},
 		{
 			name:      "non-existing order: not ok",
@@ -231,7 +226,7 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 		{
 			name: "single order, most fields nil: ok",
 			orderFn: func() domain.Order {
-				order := fakeOrder()
+				order := randomOrder()
 				order.Tags = nil
 				order.Url = nil
 				order.Payload = []byte(`{}`)
@@ -272,8 +267,8 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 func (suite *orderRepositorySuite) TestSearchOrders() {
 	defer suite.deleteAll()
 
-	order1 := fakeOrder()
-	order2 := fakeOrder()
+	order1 := randomOrder()
+	order2 := randomOrder()
 	orderIDs := suite.insertOrders(order1, order2)
 
 	tests := []struct {
@@ -445,11 +440,11 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 	}{
 		{
 			name:    "delete existing order: ok",
-			orderFn: fakeOrder,
+			orderFn: randomOrder,
 		},
 		{
 			name:    "delete non-existing order: not found",
-			orderFn: fakeOrder,
+			orderFn: randomOrder,
 			orderIDToDelete: func() uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
 			},
@@ -457,7 +452,7 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 		},
 		{
 			name:    "delete with empty order ID: error",
-			orderFn: fakeOrder,
+			orderFn: randomOrder,
 			orderIDToDelete: func() uuid.UUID {
 				return uuid.Nil
 			},
@@ -465,7 +460,7 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 		},
 		{
 			name:    "delete soft-deleted order: ok",
-			orderFn: fakeOrder,
+			orderFn: randomOrder,
 			setup: func(orderID uuid.UUID) error {
 				return suite.repo.SoftDeleteOrder(suite.T().Context(), orderID)
 			},
@@ -515,11 +510,11 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 	}{
 		{
 			name:    "soft-delete existing order: ok",
-			orderFn: fakeOrder,
+			orderFn: randomOrder,
 		},
 		{
 			name:    "soft-delete non-existing order: not found",
-			orderFn: fakeOrder,
+			orderFn: randomOrder,
 			orderIDToSoftDelete: func() uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
 			},
@@ -527,7 +522,7 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 		},
 		{
 			name:    "soft-delete with empty order ID: error",
-			orderFn: fakeOrder,
+			orderFn: randomOrder,
 			orderIDToSoftDelete: func() uuid.UUID {
 				return uuid.Nil
 			},
@@ -535,7 +530,7 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 		},
 		{
 			name:    "soft-delete deleted order: not found",
-			orderFn: fakeOrder,
+			orderFn: randomOrder,
 			setup: func(orderID uuid.UUID) error {
 				return suite.repo.DeleteOrder(suite.T().Context(), orderID)
 			},
@@ -594,16 +589,16 @@ func (suite *orderRepositorySuite) deleteAll() {
 	suite.NoError(err)
 }
 
-func fakeOrder() domain.Order {
-	currencyUnit := fakeCurrency() // it has to be the same for all items
+func randomOrder() domain.Order {
+	currencyUnit := randomCurrency() // it has to be the same for all items
 	orderAmount := decimal.Zero
 
 	var items []domain.OrderItem
 	for i := 0; i < gofakeit.Number(1, 5); i++ {
-		fakeItem := fakeOrderItem()
-		fakeItem.Price.Currency = currencyUnit
-		orderAmount = orderAmount.Add(fakeItem.Price.Amount)
-		items = append(items, fakeOrderItem())
+		orderItem := randomOrderItem()
+		orderItem.Price.Currency = currencyUnit
+		orderAmount = orderAmount.Add(orderItem.Price.Amount)
+		items = append(items, randomOrderItem())
 	}
 
 	var tags []string
@@ -615,10 +610,10 @@ func fakeOrder() domain.Order {
 		ID:       uuid.Nil,
 		OwnerID:  gofakeit.UUID(),
 		Items:    items,
-		Url:      fakeURL(),
+		Url:      randomURL(),
 		Tags:     tags,
-		Payload:  fakeJson(),
-		PayloadB: fakeJson(),
+		Payload:  randomJson(),
+		PayloadB: randomJson(),
 		Price: domain.Money{
 			Amount:   orderAmount,
 			Currency: currencyUnit,
@@ -626,12 +621,12 @@ func fakeOrder() domain.Order {
 	}
 }
 
-func fakeOrderItem() domain.OrderItem {
+func randomOrderItem() domain.OrderItem {
 	productID := uuid.MustParse(gofakeit.UUID())
 
 	price := gofakeit.Price(1, 100)
 
-	currencyUnit := fakeCurrency()
+	currencyUnit := randomCurrency()
 
 	return domain.OrderItem{
 		ProductID: productID,
@@ -642,7 +637,7 @@ func fakeOrderItem() domain.OrderItem {
 	}
 }
 
-func fakeURL() *url.URL {
+func randomURL() *url.URL {
 	var (
 		result *url.URL
 		err    error
@@ -658,7 +653,7 @@ func fakeURL() *url.URL {
 	return result
 }
 
-func fakeCurrency() currency.Unit {
+func randomCurrency() currency.Unit {
 	var (
 		result currency.Unit
 		err    error
@@ -675,7 +670,7 @@ func fakeCurrency() currency.Unit {
 	return result
 }
 
-func fakeJson() []byte {
+func randomJson() []byte {
 	var (
 		result []byte
 		err    error
