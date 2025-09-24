@@ -60,16 +60,16 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 
 	tests := []struct {
 		name      string
-		orderFn   func() domain.Order
+		orderFunc func() domain.Order
 		wantError string
 	}{
 		{
-			name:    "valid order with all fields: ok",
-			orderFn: randomOrder,
+			name:      "valid order with all fields: ok",
+			orderFunc: randomOrder,
 		},
 		{
 			name: "invalid order, no items: fail",
-			orderFn: func() domain.Order {
+			orderFunc: func() domain.Order {
 				o := randomOrder()
 				o.Items = nil
 				return o
@@ -77,8 +77,8 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 			wantError: "no items in order",
 		},
 		{
-			name:    "valid order, nil tags, nil url: ok",
-			orderFn: randomOrder,
+			name:      "valid order, nil tags, nil url: ok",
+			orderFunc: randomOrder,
 		},
 	}
 
@@ -87,9 +87,9 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 			t := suite.T()
 			ctx := t.Context()
 
-			o := tt.orderFn()
+			ttOrder := tt.orderFunc()
 
-			orderID, err := suite.repo.InsertOrder(ctx, o)
+			orderID, err := suite.repo.InsertOrder(ctx, ttOrder)
 			if tt.wantError != "" {
 				require.EqualError(t, err, tt.wantError)
 				return
@@ -98,7 +98,7 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 			actualOrder, err := suite.repo.GetOrder(ctx, orderID)
 			require.NoError(t, err)
 
-			expected := o
+			expected := ttOrder
 			expected.ID = orderID
 			expected.Status = domain.OrderStatusPending
 
@@ -108,57 +108,59 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 }
 
 func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
+	defer suite.deleteAll()
+
 	tests := []struct {
-		name              string
-		orderFn           func() domain.Order
-		newStatus         domain.OrderStatus
-		orderIDToUpdateFn func() uuid.UUID
-		setup             func(uuid.UUID) error
-		wantError         string
+		name         string
+		orderFunc    func() domain.Order
+		newStatus    domain.OrderStatus
+		prepareFunc  func(uuid.UUID) error // prepare a test case before updating the status, i.e. soft-delete the order
+		targetIDFunc func() uuid.UUID      // which order ID to update, if nil use the inserted one
+		wantError    string
 	}{
 		{
 			name:      "update status of existing order: ok",
-			orderFn:   randomOrder,
+			orderFunc: randomOrder,
 			newStatus: domain.OrderStatusShipped,
 		},
 		{
 			name:      "update status of non-existing order: not found",
-			orderFn:   randomOrder,
+			orderFunc: randomOrder,
 			newStatus: domain.OrderStatusShipped,
-			orderIDToUpdateFn: func() uuid.UUID {
+			targetIDFunc: func() uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
 			},
 			wantError: "q.UpdateOrderStatus: order not found",
 		},
 		{
 			name:      "update status with empty order ID: error",
-			orderFn:   randomOrder,
+			orderFunc: randomOrder,
 			newStatus: domain.OrderStatusShipped,
-			orderIDToUpdateFn: func() uuid.UUID {
+			targetIDFunc: func() uuid.UUID {
 				return uuid.Nil
 			},
 			wantError: "orderID is empty",
 		},
 		{
 			name:      "update status with empty status: error",
-			orderFn:   randomOrder,
+			orderFunc: randomOrder,
 			newStatus: "",
 			wantError: "status is empty",
 		},
 		{
 			name:      "update status of soft-deleted order: not found",
-			orderFn:   randomOrder,
+			orderFunc: randomOrder,
 			newStatus: domain.OrderStatusShipped,
-			setup: func(u uuid.UUID) error {
+			prepareFunc: func(u uuid.UUID) error {
 				return suite.repo.SoftDeleteOrder(suite.T().Context(), u)
 			},
 			wantError: "q.UpdateOrderStatus: order not found",
 		},
 		{
 			name:      "update status of deleted order: not found",
-			orderFn:   randomOrder,
+			orderFunc: randomOrder,
 			newStatus: domain.OrderStatusShipped,
-			setup: func(u uuid.UUID) error {
+			prepareFunc: func(u uuid.UUID) error {
 				return suite.repo.DeleteOrder(suite.T().Context(), u)
 			},
 			wantError: "q.UpdateOrderStatus: order not found",
@@ -172,23 +174,23 @@ func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
 			t := suite.T()
 			ctx := t.Context()
 
-			order := tt.orderFn()
+			ttOrder := tt.orderFunc()
 
-			orderID, err := suite.repo.InsertOrder(ctx, order)
+			orderID, err := suite.repo.InsertOrder(ctx, ttOrder)
 			require.NoError(t, err)
 
-			if tt.setup != nil {
-				err := tt.setup(orderID)
+			if tt.prepareFunc != nil {
+				err := tt.prepareFunc(orderID)
 				require.NoError(t, err)
 			}
 
-			orderIDToUpdate := orderID
-			if tt.orderIDToUpdateFn != nil {
-				orderIDToUpdate = tt.orderIDToUpdateFn()
+			targetOrderID := orderID
+			if tt.targetIDFunc != nil {
+				targetOrderID = tt.targetIDFunc()
 			}
 
 			// Perform the status update
-			err = suite.repo.UpdateOrderStatus(ctx, orderIDToUpdate, tt.newStatus)
+			err = suite.repo.UpdateOrderStatus(ctx, targetOrderID, tt.newStatus)
 			if tt.wantError != "" {
 				require.EqualError(t, err, tt.wantError)
 				return
@@ -198,7 +200,7 @@ func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
 			updatedOrder, err := suite.repo.GetOrder(ctx, orderID)
 			require.NoError(t, err)
 
-			expected := order
+			expected := ttOrder
 			expected.Status = tt.newStatus
 
 			assertOrder(t, expected, updatedOrder)
@@ -211,21 +213,21 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 
 	tests := []struct {
 		name      string
-		orderFn   func() domain.Order
+		orderFunc func() domain.Order
 		wantError string
 	}{
 		{
-			name:    "existing order: ok",
-			orderFn: randomOrder,
+			name:      "existing order: ok",
+			orderFunc: randomOrder,
 		},
 		{
 			name:      "non-existing order: not ok",
-			orderFn:   func() domain.Order { return domain.Order{ID: uuid.MustParse(gofakeit.UUID())} },
+			orderFunc: func() domain.Order { return domain.Order{ID: uuid.MustParse(gofakeit.UUID())} },
 			wantError: "order not found",
 		},
 		{
 			name: "single order, most fields nil: ok",
-			orderFn: func() domain.Order {
+			orderFunc: func() domain.Order {
 				order := randomOrder()
 				order.Tags = nil
 				order.Url = nil
@@ -240,7 +242,7 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 		suite.Run(tt.name, func() {
 			t := suite.T()
 
-			order := tt.orderFn()
+			order := tt.orderFunc()
 
 			// Determine if we need to create a new order or use an existing ID
 			orderID := order.ID
@@ -431,37 +433,39 @@ func (suite *orderRepositorySuite) TestSearchOrders() {
 }
 
 func (suite *orderRepositorySuite) TestDeleteOrder() {
+	defer suite.deleteAll()
+
 	tests := []struct {
-		name            string
-		orderFn         func() domain.Order
-		setup           func(uuid uuid.UUID) error
-		orderIDToDelete func() uuid.UUID
-		wantError       string
+		name         string
+		orderFunc    func() domain.Order
+		prepareFunc  func(uuid uuid.UUID) error // prepare a test case before deleting the order, i.e. soft-delete the order
+		targetIDFunc func() uuid.UUID           // which order ID to delete, if nil use the inserted one
+		wantError    string
 	}{
 		{
-			name:    "delete existing order: ok",
-			orderFn: randomOrder,
+			name:      "delete existing order: ok",
+			orderFunc: randomOrder,
 		},
 		{
-			name:    "delete non-existing order: not found",
-			orderFn: randomOrder,
-			orderIDToDelete: func() uuid.UUID {
+			name:      "delete non-existing order: not found",
+			orderFunc: randomOrder,
+			targetIDFunc: func() uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
 			},
 			wantError: "withTx: q.DeleteOrderItems: order not found",
 		},
 		{
-			name:    "delete with empty order ID: error",
-			orderFn: randomOrder,
-			orderIDToDelete: func() uuid.UUID {
+			name:      "delete with empty order ID: error",
+			orderFunc: randomOrder,
+			targetIDFunc: func() uuid.UUID {
 				return uuid.Nil
 			},
 			wantError: "orderID is empty",
 		},
 		{
-			name:    "delete soft-deleted order: ok",
-			orderFn: randomOrder,
-			setup: func(orderID uuid.UUID) error {
+			name:      "delete soft-deleted order: ok",
+			orderFunc: randomOrder,
+			prepareFunc: func(orderID uuid.UUID) error {
 				return suite.repo.SoftDeleteOrder(suite.T().Context(), orderID)
 			},
 		},
@@ -472,18 +476,18 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 			t := suite.T()
 			ctx := t.Context()
 
-			order := tt.orderFn()
+			order := tt.orderFunc()
 			orderID, err := suite.repo.InsertOrder(t.Context(), order)
 			require.NoError(t, err)
 
-			if tt.setup != nil {
-				err := tt.setup(orderID)
+			if tt.prepareFunc != nil {
+				err := tt.prepareFunc(orderID)
 				require.NoError(t, err)
 			}
 
 			toDeleteOrderID := orderID
-			if tt.orderIDToDelete != nil {
-				toDeleteOrderID = tt.orderIDToDelete()
+			if tt.targetIDFunc != nil {
+				toDeleteOrderID = tt.targetIDFunc()
 			}
 
 			err = suite.repo.DeleteOrder(ctx, toDeleteOrderID)
@@ -501,37 +505,39 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 }
 
 func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
+	defer suite.deleteAll()
+
 	tests := []struct {
-		name                string
-		orderFn             func() domain.Order
-		orderIDToSoftDelete func() uuid.UUID
-		setup               func(uuid.UUID) error
-		wantError           string
+		name         string
+		orderFunc    func() domain.Order
+		targetIDFunc func() uuid.UUID      // which order ID to soft-delete, if nil use the inserted one
+		prepareFunc  func(uuid.UUID) error // prepare a test case before soft-deleting the order, i.e. delete the order
+		wantError    string
 	}{
 		{
-			name:    "soft-delete existing order: ok",
-			orderFn: randomOrder,
+			name:      "soft-delete existing order: ok",
+			orderFunc: randomOrder,
 		},
 		{
-			name:    "soft-delete non-existing order: not found",
-			orderFn: randomOrder,
-			orderIDToSoftDelete: func() uuid.UUID {
+			name:      "soft-delete non-existing order: not found",
+			orderFunc: randomOrder,
+			targetIDFunc: func() uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
 			},
 			wantError: "q.SoftDeleteOrder: order not found",
 		},
 		{
-			name:    "soft-delete with empty order ID: error",
-			orderFn: randomOrder,
-			orderIDToSoftDelete: func() uuid.UUID {
+			name:      "soft-delete with empty order ID: error",
+			orderFunc: randomOrder,
+			targetIDFunc: func() uuid.UUID {
 				return uuid.Nil
 			},
 			wantError: "orderID is empty",
 		},
 		{
-			name:    "soft-delete deleted order: not found",
-			orderFn: randomOrder,
-			setup: func(orderID uuid.UUID) error {
+			name:      "soft-delete deleted order: not found",
+			orderFunc: randomOrder,
+			prepareFunc: func(orderID uuid.UUID) error {
 				return suite.repo.DeleteOrder(suite.T().Context(), orderID)
 			},
 			wantError: "q.SoftDeleteOrder: order not found",
@@ -544,17 +550,17 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 			ctx := t.Context()
 
 			// Insert the order if needed
-			order := tt.orderFn()
+			order := tt.orderFunc()
 			orderID, err := suite.repo.InsertOrder(ctx, order)
 			require.NoError(t, err)
 
 			toDeleteOrderID := orderID
-			if tt.orderIDToSoftDelete != nil {
-				toDeleteOrderID = tt.orderIDToSoftDelete()
+			if tt.targetIDFunc != nil {
+				toDeleteOrderID = tt.targetIDFunc()
 			}
 
-			if tt.setup != nil {
-				err := tt.setup(orderID)
+			if tt.prepareFunc != nil {
+				err := tt.prepareFunc(orderID)
 				require.NoError(t, err)
 			}
 
@@ -686,7 +692,7 @@ func randomJson() []byte {
 	return result
 }
 
-func assertOrder(t *testing.T, expected domain.Order, actual domain.Order) {
+func assertOrder(t *testing.T, expected, actual domain.Order) {
 	t.Helper()
 
 	currencyComparer := cmp.Comparer(func(x, y currency.Unit) bool {
@@ -715,7 +721,6 @@ func assertOrder(t *testing.T, expected domain.Order, actual domain.Order) {
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(domain.OrderItem{}, "CreatedAt"),
 		cmpopts.IgnoreFields(domain.Order{}, "CreatedAt", "UpdatedAt", "ID", "Status"),
-		// cmpopts.EquateEmpty(),
 		currencyComparer,
 		cmp.FilterPath(func(p cmp.Path) bool {
 			return p.Last().String() == ".Payload" || p.Last().String() == ".PayloadB"
@@ -731,7 +736,7 @@ func assertOrder(t *testing.T, expected domain.Order, actual domain.Order) {
 	assert.NotEqual(t, uuid.Nil, actual.ID)
 }
 
-func assertOrders(t *testing.T, expected []domain.Order, actual []domain.Order) {
+func assertOrders(t *testing.T, expected, actual []domain.Order) {
 	t.Helper()
 
 	sortOrders := func(orders []domain.Order) {
