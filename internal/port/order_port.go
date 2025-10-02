@@ -8,7 +8,7 @@ import (
 
 type OrderRepository interface {
 	GetOrder(ctx context.Context, orderID uuid.UUID) (domain.Order, error)
-	GetOrderJoin(ctx context.Context, orderID uuid.UUID) (domain.Order, error)
+	GetOrderSeparateQueries(ctx context.Context, orderID uuid.UUID) (domain.Order, error)
 
 	SearchOrders(ctx context.Context, filter domain.OrderFilter) ([]domain.Order, error)
 

@@ -39,6 +39,36 @@ func NewOrder(dbtx db.DBTX) (port.OrderRepository, error) {
 func (r *orderRepository) GetOrder(ctx context.Context, orderID uuid.UUID) (domain.Order, error) {
 	var o domain.Order
 
+	dbOrderItemsRows, err := r.q.GetOrderJoinItems(ctx, orderID)
+	if err != nil {
+		return o, fmt.Errorf("q.GetOrderJoinItems: %w", err)
+	}
+
+	if len(dbOrderItemsRows) == 0 {
+		return o, ErrNotFound
+	}
+
+	// Map the first row to domain.Order
+	order, err := mapGetOrderJoinItemsRowToDomainOrder(dbOrderItemsRows[0])
+	if err != nil {
+		return o, fmt.Errorf("mapGetOrderJoinItemsRowToDomainOrder: %w", err)
+	}
+
+	// Iterate over the rows and map to domain.OrderItem
+	for _, row := range dbOrderItemsRows {
+		item, err := mapGetOrderJoinItemsRowToDomainOrderItem(row)
+		if err != nil {
+			return o, fmt.Errorf("mapGetOrderJoinItemsRowToDomainOrderItem: %w", err)
+		}
+		order.Items = append(order.Items, item)
+	}
+
+	return order, nil
+}
+
+func (r *orderRepository) GetOrderSeparateQueries(ctx context.Context, orderID uuid.UUID) (domain.Order, error) {
+	var o domain.Order
+
 	order, err := withTx(ctx, r.dbtx, func(q *db.Queries) (domain.Order, error) {
 		dbOrder, err := q.GetOrder(ctx, orderID)
 		if err != nil {
@@ -62,36 +92,6 @@ func (r *orderRepository) GetOrder(ctx context.Context, orderID uuid.UUID) (doma
 	})
 	if err != nil {
 		return o, fmt.Errorf("withTx: %w", err)
-	}
-
-	return order, nil
-}
-
-func (r *orderRepository) GetOrderJoin(ctx context.Context, orderID uuid.UUID) (domain.Order, error) {
-	var o domain.Order
-
-	dbOrderItemsRows, err := r.q.GetOrderJoinItems(ctx, orderID)
-	if err != nil {
-		return o, fmt.Errorf("q.GetOrderJoinItems: %w", err)
-	}
-
-	if len(dbOrderItemsRows) == 0 {
-		return o, ErrNotFound
-	}
-
-	// Map the first row to domain.Order
-	order, err := mapGetOrderJoinItemsRowToDomainOrder(dbOrderItemsRows[0])
-	if err != nil {
-		return o, fmt.Errorf("mapGetOrderJoinItemsRowToDomainOrder: %w", err)
-	}
-
-	// Iterate over the rows and map to domain.OrderItem
-	for _, row := range dbOrderItemsRows {
-		item, err := mapGetOrderJoinItemsRowToDomainOrderItem(row)
-		if err != nil {
-			return o, fmt.Errorf("mapGetOrderJoinItemsRowToDomainOrderItem: %w", err)
-		}
-		order.Items = append(order.Items, item)
 	}
 
 	return order, nil

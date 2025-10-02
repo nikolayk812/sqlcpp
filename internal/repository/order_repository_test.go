@@ -77,8 +77,13 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 			wantError: "no items in order",
 		},
 		{
-			name:      "valid order, nil tags, nil url: ok",
-			orderFunc: randomOrder,
+			name: "valid order, nil tags, nil url: ok",
+			orderFunc: func() domain.Order {
+				o := randomOrder()
+				o.Tags = nil
+				o.Url = nil
+				return o
+			},
 		},
 	}
 
@@ -208,7 +213,7 @@ func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
 	}
 }
 
-func (suite *orderRepositorySuite) TestGetOrderJoin() {
+func (suite *orderRepositorySuite) TestGetOrderSeparateQueries() {
 	defer suite.deleteAll()
 
 	tests := []struct {
@@ -223,7 +228,7 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 		{
 			name:      "non-existing order: not ok",
 			orderFunc: func() domain.Order { return domain.Order{ID: uuid.MustParse(gofakeit.UUID())} },
-			wantError: "order not found",
+			wantError: "withTx: q.GetOrder: order not found",
 		},
 		{
 			name: "single order, most fields nil: ok",
@@ -241,26 +246,27 @@ func (suite *orderRepositorySuite) TestGetOrderJoin() {
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
 			t := suite.T()
+			ctx := t.Context()
 
-			order := tt.orderFunc()
+			ttOrder := tt.orderFunc()
 
 			// Determine if we need to create a new order or use an existing ID
-			orderID := order.ID
+			orderID := ttOrder.ID
 			if orderID == uuid.Nil {
 				// Insert a new order since no ID was provided
 				var err error
-				orderID, err = suite.repo.InsertOrder(t.Context(), order)
+				orderID, err = suite.repo.InsertOrder(ctx, ttOrder)
 				require.NoError(t, err)
 			}
 
-			actualOrder, err := suite.repo.GetOrderJoin(t.Context(), orderID)
+			actualOrder, err := suite.repo.GetOrderSeparateQueries(ctx, orderID)
 			if tt.wantError != "" {
 				require.EqualError(t, err, tt.wantError)
 				return
 			}
 			require.NoError(t, err)
 
-			expected := order
+			expected := ttOrder
 			assertOrder(t, expected, actualOrder)
 		})
 	}
@@ -476,8 +482,8 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 			t := suite.T()
 			ctx := t.Context()
 
-			order := tt.orderFunc()
-			orderID, err := suite.repo.InsertOrder(t.Context(), order)
+			ttOrder := tt.orderFunc()
+			orderID, err := suite.repo.InsertOrder(ctx, ttOrder)
 			require.NoError(t, err)
 
 			if tt.prepareFunc != nil {
@@ -499,7 +505,7 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 
 			// Verify the order is deleted
 			_, err = suite.repo.GetOrder(ctx, orderID)
-			assert.EqualError(t, err, "withTx: q.GetOrder: order not found")
+			require.EqualError(t, err, "order not found")
 		})
 	}
 }
@@ -550,8 +556,8 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 			ctx := t.Context()
 
 			// Insert the order if needed
-			order := tt.orderFunc()
-			orderID, err := suite.repo.InsertOrder(ctx, order)
+			ttOrder := tt.orderFunc()
+			orderID, err := suite.repo.InsertOrder(ctx, ttOrder)
 			require.NoError(t, err)
 
 			toDeleteOrderID := orderID
@@ -573,7 +579,7 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 
 			// Verify the order is soft-deleted
 			_, err = suite.repo.GetOrder(ctx, orderID)
-			assert.EqualError(t, err, "withTx: q.GetOrder: order not found")
+			require.EqualError(t, err, "order not found")
 		})
 	}
 }
@@ -604,7 +610,7 @@ func randomOrder() domain.Order {
 		orderItem := randomOrderItem()
 		orderItem.Price.Currency = currencyUnit
 		orderAmount = orderAmount.Add(orderItem.Price.Amount)
-		items = append(items, randomOrderItem())
+		items = append(items, orderItem)
 	}
 
 	var tags []string
