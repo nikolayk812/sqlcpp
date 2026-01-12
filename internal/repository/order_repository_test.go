@@ -2,6 +2,11 @@ package repository_test
 
 import (
 	"encoding/json"
+	"net/url"
+	"sort"
+	"testing"
+	"time"
+
 	"github.com/brianvoe/gofakeit/v7"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -16,10 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/text/currency"
-	"net/url"
-	"sort"
-	"testing"
-	"time"
 )
 
 type orderRepositorySuite struct {

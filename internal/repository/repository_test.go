@@ -3,11 +3,12 @@ package repository_test
 import (
 	"context"
 	"fmt"
+
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
 func startPostgres(ctx context.Context) (*postgres.PostgresContainer, string, error) {
-	postgresContainer, err := postgres.Run(ctx, "postgres:17.6-alpine3.22",
+	postgresContainer, err := postgres.Run(ctx, "postgres:17.7-alpine3.23",
 		postgres.BasicWaitStrategies(),
 		postgres.WithInitScripts(
 			"../migrations/01_orders.up.sql",

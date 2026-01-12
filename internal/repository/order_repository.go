@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/nikolayk812/sqlcpp/internal/db"
@@ -11,8 +14,6 @@ import (
 	"github.com/nikolayk812/sqlcpp/internal/port"
 	"github.com/samber/lo"
 	"golang.org/x/text/currency"
-	"net/url"
-	"time"
 )
 
 var (

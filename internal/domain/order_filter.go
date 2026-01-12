@@ -3,8 +3,9 @@ package domain
 import (
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // OrderFilter has AND semantics across fields, OR semantics within each field slice

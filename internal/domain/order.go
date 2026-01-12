@@ -1,9 +1,10 @@
 package domain
 
 import (
-	"github.com/google/uuid"
 	"net/url"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Order struct {
