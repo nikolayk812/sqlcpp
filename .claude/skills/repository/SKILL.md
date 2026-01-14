@@ -13,6 +13,7 @@ This skill provides guidance on implementing repository pattern in Go using SQLC
 - **Domain Focus**: Accept and return domain models only, never SQLC-generated types
 - **Interface Segregation**: Implement port interfaces from `internal/port/`
 - **Transaction Support**: Handle both connection pools and transactions via `db.DBTX`
+- **Transaction Usage**: Use transaction wrappers (`withTx`) only for repository methods that execute multiple SQLC queries; single-query methods can execute directly without transaction wrapping
 - **SQLC Delegation**: Repository methods delegate to SQLC queries, then map results using consistent naming:
   - `map[SQLCType]ToDomain[DomainType](row db.Row) (domain.Type, error)`
   - `mapDomain[Type]To[SQLCParams](model domain.Type) db.Params`
