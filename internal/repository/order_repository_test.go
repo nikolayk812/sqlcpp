@@ -60,17 +60,17 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 	defer suite.deleteAll()
 
 	tests := []struct {
-		name      string
-		orderFunc func() domain.Order
-		wantError string
+		name       string
+		buildOrder func() domain.Order
+		wantError  string
 	}{
 		{
-			name:      "valid order with all fields: ok",
-			orderFunc: randomOrder,
+			name:       "valid order with all fields: ok",
+			buildOrder: randomOrder,
 		},
 		{
 			name: "invalid order, no items: fail",
-			orderFunc: func() domain.Order {
+			buildOrder: func() domain.Order {
 				o := randomOrder()
 				o.Items = nil
 				return o
@@ -79,7 +79,7 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 		},
 		{
 			name: "valid order, nil tags, nil url: ok",
-			orderFunc: func() domain.Order {
+			buildOrder: func() domain.Order {
 				o := randomOrder()
 				o.Tags = nil
 				o.Url = nil
@@ -93,7 +93,7 @@ func (suite *orderRepositorySuite) TestInsertOrder() {
 			t := suite.T()
 			ctx := t.Context()
 
-			ttOrder := tt.orderFunc()
+			ttOrder := tt.buildOrder()
 
 			orderID, err := suite.repo.InsertOrder(ctx, ttOrder)
 			if tt.wantError != "" {
@@ -118,55 +118,55 @@ func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
 
 	tests := []struct {
 		name         string
-		orderFunc    func() domain.Order
+		buildOrder   func() domain.Order
 		newStatus    domain.OrderStatus
-		prepareFunc  func(uuid.UUID) error // prepare a test case before updating the status, i.e. soft-delete the order
-		targetIDFunc func() uuid.UUID      // which order ID to update, if nil use the inserted one
+		arrangeState func(uuid.UUID) error // arrange state for test case before the operation, i.e. soft-delete the order
+		useOrderID   func() uuid.UUID      // override which order ID to use, if nil use the inserted one
 		wantError    string
 	}{
 		{
-			name:      "update status of existing order: ok",
-			orderFunc: randomOrder,
-			newStatus: domain.OrderStatusShipped,
+			name:       "update status of existing order: ok",
+			buildOrder: randomOrder,
+			newStatus:  domain.OrderStatusShipped,
 		},
 		{
-			name:      "update status of non-existing order: not found",
-			orderFunc: randomOrder,
-			newStatus: domain.OrderStatusShipped,
-			targetIDFunc: func() uuid.UUID {
+			name:       "update status of non-existing order: not found",
+			buildOrder: randomOrder,
+			newStatus:  domain.OrderStatusShipped,
+			useOrderID: func() uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
 			},
 			wantError: "q.UpdateOrderStatus: order not found",
 		},
 		{
-			name:      "update status with empty order ID: error",
-			orderFunc: randomOrder,
-			newStatus: domain.OrderStatusShipped,
-			targetIDFunc: func() uuid.UUID {
+			name:       "update status with empty order ID: error",
+			buildOrder: randomOrder,
+			newStatus:  domain.OrderStatusShipped,
+			useOrderID: func() uuid.UUID {
 				return uuid.Nil
 			},
 			wantError: "orderID is empty",
 		},
 		{
-			name:      "update status with empty status: error",
-			orderFunc: randomOrder,
-			newStatus: "",
-			wantError: "status is empty",
+			name:       "update status with empty status: error",
+			buildOrder: randomOrder,
+			newStatus:  "",
+			wantError:  "status is empty",
 		},
 		{
-			name:      "update status of soft-deleted order: not found",
-			orderFunc: randomOrder,
-			newStatus: domain.OrderStatusShipped,
-			prepareFunc: func(u uuid.UUID) error {
+			name:       "update status of soft-deleted order: not found",
+			buildOrder: randomOrder,
+			newStatus:  domain.OrderStatusShipped,
+			arrangeState: func(u uuid.UUID) error {
 				return suite.repo.SoftDeleteOrder(suite.T().Context(), u)
 			},
 			wantError: "q.UpdateOrderStatus: order not found",
 		},
 		{
-			name:      "update status of deleted order: not found",
-			orderFunc: randomOrder,
-			newStatus: domain.OrderStatusShipped,
-			prepareFunc: func(u uuid.UUID) error {
+			name:       "update status of deleted order: not found",
+			buildOrder: randomOrder,
+			newStatus:  domain.OrderStatusShipped,
+			arrangeState: func(u uuid.UUID) error {
 				return suite.repo.DeleteOrder(suite.T().Context(), u)
 			},
 			wantError: "q.UpdateOrderStatus: order not found",
@@ -180,19 +180,19 @@ func (suite *orderRepositorySuite) TestUpdateOrderStatus() {
 			t := suite.T()
 			ctx := t.Context()
 
-			ttOrder := tt.orderFunc()
+			ttOrder := tt.buildOrder()
 
 			orderID, err := suite.repo.InsertOrder(ctx, ttOrder)
 			require.NoError(t, err)
 
-			if tt.prepareFunc != nil {
-				err := tt.prepareFunc(orderID)
+			if tt.arrangeState != nil {
+				err := tt.arrangeState(orderID)
 				require.NoError(t, err)
 			}
 
 			targetOrderID := orderID
-			if tt.targetIDFunc != nil {
-				targetOrderID = tt.targetIDFunc()
+			if tt.useOrderID != nil {
+				targetOrderID = tt.useOrderID()
 			}
 
 			// Perform the status update
@@ -218,22 +218,22 @@ func (suite *orderRepositorySuite) TestGetOrderSeparateQueries() {
 	defer suite.deleteAll()
 
 	tests := []struct {
-		name      string
-		orderFunc func() domain.Order
-		wantError string
+		name       string
+		buildOrder func() domain.Order
+		wantError  string
 	}{
 		{
-			name:      "existing order: ok",
-			orderFunc: randomOrder,
+			name:       "existing order: ok",
+			buildOrder: randomOrder,
 		},
 		{
-			name:      "non-existing order: not ok",
-			orderFunc: func() domain.Order { return domain.Order{ID: uuid.MustParse(gofakeit.UUID())} },
-			wantError: "withTx: q.GetOrder: order not found",
+			name:       "non-existing order: not ok",
+			buildOrder: func() domain.Order { return domain.Order{ID: uuid.MustParse(gofakeit.UUID())} },
+			wantError:  "withTx: q.GetOrder: order not found",
 		},
 		{
 			name: "single order, most fields nil: ok",
-			orderFunc: func() domain.Order {
+			buildOrder: func() domain.Order {
 				order := randomOrder()
 				order.Tags = nil
 				order.Url = nil
@@ -249,7 +249,7 @@ func (suite *orderRepositorySuite) TestGetOrderSeparateQueries() {
 			t := suite.T()
 			ctx := t.Context()
 
-			ttOrder := tt.orderFunc()
+			ttOrder := tt.buildOrder()
 
 			// Determine if we need to create a new order or use an existing ID
 			orderID := ttOrder.ID
@@ -444,35 +444,35 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 
 	tests := []struct {
 		name         string
-		orderFunc    func() domain.Order
-		prepareFunc  func(uuid uuid.UUID) error // prepare a test case before deleting the order, i.e. soft-delete the order
-		targetIDFunc func() uuid.UUID           // which order ID to delete, if nil use the inserted one
+		buildOrder   func() domain.Order
+		arrangeState func(uuid.UUID) error // arrange state for test case before the operation, i.e. soft-delete the order
+		useOrderID   func() uuid.UUID      // override which order ID to use, if nil use the inserted one
 		wantError    string
 	}{
 		{
-			name:      "delete existing order: ok",
-			orderFunc: randomOrder,
+			name:       "delete existing order: ok",
+			buildOrder: randomOrder,
 		},
 		{
-			name:      "delete non-existing order: not found",
-			orderFunc: randomOrder,
-			targetIDFunc: func() uuid.UUID {
+			name:       "delete non-existing order: not found",
+			buildOrder: randomOrder,
+			useOrderID: func() uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
 			},
 			wantError: "withTx: q.DeleteOrderItems: order not found",
 		},
 		{
-			name:      "delete with empty order ID: error",
-			orderFunc: randomOrder,
-			targetIDFunc: func() uuid.UUID {
+			name:       "delete with empty order ID: error",
+			buildOrder: randomOrder,
+			useOrderID: func() uuid.UUID {
 				return uuid.Nil
 			},
 			wantError: "orderID is empty",
 		},
 		{
-			name:      "delete soft-deleted order: ok",
-			orderFunc: randomOrder,
-			prepareFunc: func(orderID uuid.UUID) error {
+			name:       "delete soft-deleted order: ok",
+			buildOrder: randomOrder,
+			arrangeState: func(orderID uuid.UUID) error {
 				return suite.repo.SoftDeleteOrder(suite.T().Context(), orderID)
 			},
 		},
@@ -483,18 +483,18 @@ func (suite *orderRepositorySuite) TestDeleteOrder() {
 			t := suite.T()
 			ctx := t.Context()
 
-			ttOrder := tt.orderFunc()
+			ttOrder := tt.buildOrder()
 			orderID, err := suite.repo.InsertOrder(ctx, ttOrder)
 			require.NoError(t, err)
 
-			if tt.prepareFunc != nil {
-				err := tt.prepareFunc(orderID)
+			if tt.arrangeState != nil {
+				err := tt.arrangeState(orderID)
 				require.NoError(t, err)
 			}
 
 			toDeleteOrderID := orderID
-			if tt.targetIDFunc != nil {
-				toDeleteOrderID = tt.targetIDFunc()
+			if tt.useOrderID != nil {
+				toDeleteOrderID = tt.useOrderID()
 			}
 
 			err = suite.repo.DeleteOrder(ctx, toDeleteOrderID)
@@ -516,35 +516,35 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 
 	tests := []struct {
 		name         string
-		orderFunc    func() domain.Order
-		targetIDFunc func() uuid.UUID      // which order ID to soft-delete, if nil use the inserted one
-		prepareFunc  func(uuid.UUID) error // prepare a test case before soft-deleting the order, i.e. delete the order
+		buildOrder   func() domain.Order
+		useOrderID   func() uuid.UUID      // override which order ID to use, if nil use the inserted one
+		arrangeState func(uuid.UUID) error // arrange state for test case before the operation, i.e. delete the order
 		wantError    string
 	}{
 		{
-			name:      "soft-delete existing order: ok",
-			orderFunc: randomOrder,
+			name:       "soft-delete existing order: ok",
+			buildOrder: randomOrder,
 		},
 		{
-			name:      "soft-delete non-existing order: not found",
-			orderFunc: randomOrder,
-			targetIDFunc: func() uuid.UUID {
+			name:       "soft-delete non-existing order: not found",
+			buildOrder: randomOrder,
+			useOrderID: func() uuid.UUID {
 				return uuid.MustParse(gofakeit.UUID())
 			},
 			wantError: "q.SoftDeleteOrder: order not found",
 		},
 		{
-			name:      "soft-delete with empty order ID: error",
-			orderFunc: randomOrder,
-			targetIDFunc: func() uuid.UUID {
+			name:       "soft-delete with empty order ID: error",
+			buildOrder: randomOrder,
+			useOrderID: func() uuid.UUID {
 				return uuid.Nil
 			},
 			wantError: "orderID is empty",
 		},
 		{
-			name:      "soft-delete deleted order: not found",
-			orderFunc: randomOrder,
-			prepareFunc: func(orderID uuid.UUID) error {
+			name:       "soft-delete deleted order: not found",
+			buildOrder: randomOrder,
+			arrangeState: func(orderID uuid.UUID) error {
 				return suite.repo.DeleteOrder(suite.T().Context(), orderID)
 			},
 			wantError: "q.SoftDeleteOrder: order not found",
@@ -557,17 +557,17 @@ func (suite *orderRepositorySuite) TestSoftDeleteOrder() {
 			ctx := t.Context()
 
 			// Insert the order if needed
-			ttOrder := tt.orderFunc()
+			ttOrder := tt.buildOrder()
 			orderID, err := suite.repo.InsertOrder(ctx, ttOrder)
 			require.NoError(t, err)
 
 			toDeleteOrderID := orderID
-			if tt.targetIDFunc != nil {
-				toDeleteOrderID = tt.targetIDFunc()
+			if tt.useOrderID != nil {
+				toDeleteOrderID = tt.useOrderID()
 			}
 
-			if tt.prepareFunc != nil {
-				err := tt.prepareFunc(orderID)
+			if tt.arrangeState != nil {
+				err := tt.arrangeState(orderID)
 				require.NoError(t, err)
 			}
 

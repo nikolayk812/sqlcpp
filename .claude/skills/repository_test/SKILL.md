@@ -12,9 +12,11 @@ This skill provides guidance on testing repository implementations using real da
 
 - **Real Database Testing**: Use testcontainers with PostgreSQL, not mocks
 - **Domain Model Focus**: Test with domain models only, never SQLC types
-- **Comprehensive Coverage**: Test success paths and all error scenarios (validation, not found, state conflicts)
+- **One Assert Per Domain Model**: Create `assert[ModelName]` for EVERY domain model returned by repository methods (e.g., `assertCart`, `assertOrder`)
+- **Mandatory Custom Assertions**: Compare all fields except generated ones (ID, timestamps). NEVER use `assert.Equal` on individual model fields
+- **Comprehensive Error Coverage**: Test validation, not found, and state-dependent errors using `arrangeState` patterns
 - **Table-Driven Structure**: Organize with clear test scenarios and expected outcomes
-- **Test Isolation**: Use `defer suite.deleteAll()` and `TRUNCATE` for cleanup
+- **Consistent Cleanup**: Use `defer suite.deleteAll()` once per test method, never per test case
 
 ## Key Patterns
 
@@ -31,30 +33,32 @@ type repositorySuite struct {
 ```go
 tests := []struct {
     name         string
-    inputFunc    func() domain.Model
-    prepareFunc  func(uuid.UUID) error  // optional setup
-    targetIDFunc func() uuid.UUID       // optional ID override
+    buildModel   func() domain.Model
+    arrangeState func(uuid.UUID) error  // arrange state for test case before the operation
+    useModelID   func() uuid.UUID       // override which model ID to use, if nil use the inserted one
     wantError    string
 }{
-    {name: "valid input: ok", inputFunc: randomModel},
-    {name: "empty ID: error", targetIDFunc: func() uuid.UUID { return uuid.Nil }, wantError: "id is empty"},
+    // Must test ALL error categories:
+    {name: "valid input: ok", buildModel: randomModel},
+    {name: "empty id: error", useModelID: func() uuid.UUID { return uuid.Nil }, wantError: "id is empty"},
+    {name: "non-existing: not found", useModelID: randomUUID, wantError: "q.Method: record not found"},
+    {name: "soft-deleted: not found", arrangeState: softDelete, wantError: "q.Method: record not found"},
 }
 ```
 
-### Error Testing Categories
+### Forbidden Patterns
 ```go
-// Validation errors
-wantError: "field is empty"
+// NEVER do manual field assertions
+require.Equal(t, expected.OwnerID, actual.OwnerID)  // ❌ FORBIDDEN
+require.Len(t, actual.Items, len(expected.Items))   // ❌ FORBIDDEN
 
-// Not found scenarios
-wantError: "q.Method: record not found"
-
-// State-dependent errors
-prepareFunc: func(id uuid.UUID) error { return suite.repo.SoftDelete(ctx, id) }
+// ALWAYS use comprehensive model assertions
+assertCart(t, expected, actual)                     // ✅ REQUIRED
 ```
 
-### Custom Assertions
+### Custom Assertions (Required for Each Model)
 ```go
+// MUST create for every domain model - compare ALL fields except generated ones
 func assertModel(t *testing.T, expected, actual domain.Model) {
     opts := cmp.Options{
         cmpopts.IgnoreFields(domain.Model{}, "CreatedAt", "UpdatedAt", "ID"),
@@ -72,4 +76,4 @@ func assertModel(t *testing.T, expected, actual domain.Model) {
 - **Container Setup**: Initialize with migration scripts via `postgres.WithInitScripts()`
 - **Test Names**: Follow "action + condition: expected result" pattern
 - **Error Messages**: Verify exact error messages match repository implementations
-- **Cleanup**: Use `defer suite.deleteAll()` per test method for isolation
+- **Cleanup Pattern**: One `defer suite.deleteAll()` per test method only
