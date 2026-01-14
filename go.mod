@@ -1,6 +1,6 @@
 module github.com/nikolayk812/sqlcpp
 
-go 1.25.0
+go 1.25
 
 require (
 	github.com/brianvoe/gofakeit/v7 v7.14.0
